@@ -16,9 +16,9 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onAction }) => {
   return (
     <div className="max-w-3xl mx-auto space-y-10">
       <div className="border-b border-white/5 pb-8">
-        <h1 className="text-3xl font-bold text-white mb-3">About Handsfree</h1>
+        <h1 className="text-3xl font-bold text-white mb-3">About HandsFree</h1>
         <p className="text-slate-300 text-lg leading-relaxed">
-          Handsfree is a college project built to demonstrate that computers can be fully
+          HandsFree is a college project built to demonstrate that computers can be fully
           operated without a keyboard or mouse, using only a webcam, a microphone, and
           the built-in capabilities of modern browsers.
         </p>
@@ -32,7 +32,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onAction }) => {
         </div>
         <div className="bg-card border border-white/5 rounded-xl p-6 space-y-3 text-slate-300 leading-relaxed">
           <p>
-            Assistive technology has historically required expensive hardware. Handsfree
+            Assistive technology has historically required expensive hardware. HandsFree
             challenges this assumption by using only a standard webcam — already present on
             most modern laptops — combined with open-source AI models that run entirely in
             the browser with no server round-trips.

@@ -208,6 +208,14 @@ if (!isHandsfreeApp) {
     currentTargetEl = null;
   }
 
+  function setFocusedTextValue(el, value) {
+    const prototype = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    if (setter) setter.call(el, value);
+    else el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   function handleVoiceCommand(cmd, text) {
     if (!isTracking || isPaused) return;
 
@@ -226,14 +234,22 @@ if (!isHandsfreeApp) {
     } else if (cmd === 'clear text') {
       const el = document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        el.value = '';
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+        setFocusedTextValue(el, '');
       }
     } else if (cmd === 'dictate') {
       const el = document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        el.value = el.value ? `${el.value} ${text}` : (text || '');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? start;
+        const content = (text || '').trim();
+        const prefix = el.value.slice(0, start);
+        const separator = prefix && !/\s$/.test(prefix) && !/^[,.;:!?)]/.test(content) ? ' ' : '';
+        const insertion = `${separator}${content}`;
+        setFocusedTextValue(el, `${el.value.slice(0, start)}${insertion}${el.value.slice(end)}`);
+        try {
+          const caret = start + insertion.length;
+          el.setSelectionRange(caret, caret);
+        } catch {}
       }
     }
   }
@@ -285,7 +301,7 @@ if (!isHandsfreeApp) {
   let ws = null;
   function connectWs() {
     try {
-      ws = new WebSocket('ws://localhost:5174/?role=target');
+      ws = new WebSocket('ws://localhost:5187/?role=target');
 
       ws.onmessage = (event) => {
         try {

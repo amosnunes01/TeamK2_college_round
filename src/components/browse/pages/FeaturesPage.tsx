@@ -22,7 +22,7 @@ const features = [
   {
     icon: <Mic size={22} />, color: 'text-emerald-400', title: 'Voice Commands',
     summary: 'Web Speech API drives navigation and actions.',
-    details: 'Recognized commands: "go back", "go forward", "go home", "reload", "scroll up", "scroll down", "click", "select", "pause control", "resume control", "stop session", "start dictation". Commands are deduplicated within a 600 ms window to prevent double-firing.',
+    details: 'Recognized commands include session and listening controls, navigation, scrolling, IntentGuard actions, dictation, and explicit light/dark mode selection. Commands are deduplicated within a 600 ms window to prevent double-firing. Speech recognition must be enabled before voice commands can be heard.',
   },
   {
     icon: <MousePointer size={22} />, color: 'text-amber-400', title: 'Dwell Click',
@@ -47,7 +47,7 @@ const features = [
   {
     icon: <Volume2 size={22} />, color: 'text-indigo-400', title: 'Voice Dictation',
     summary: 'Speak to fill form fields and search boxes.',
-    details: 'Say "start dictation" to enter dictation mode. All subsequent speech is appended to the focused input as text. Say "stop dictation" to return to command mode. No server round-trip — the Web Speech API is entirely browser-native.',
+    details: 'Focus a text field and say "start dictation". Recognized speech is inserted at the caret, including in React-controlled inputs. Say "stop dictation" to return to command mode. No server round-trip — the Web Speech API is browser-native.',
   },
 ];
 
@@ -122,17 +122,25 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ onAction }) => {
         <h2 className="text-xl font-semibold text-white mb-4">Voice Command Reference</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
+            ['start session', 'Start hands-free tracking'],
+            ['stop session', 'Stop tracking and release the camera; voice stays active'],
+            ['pause control', 'Temporarily pause tracking and actions'],
+            ['resume control', 'Resume tracking and actions'],
+            ['scroll down', 'Scroll the active page downward'],
+            ['scroll up', 'Scroll the active page upward'],
             ['go back', 'Navigate back in browse history'],
             ['go forward', 'Navigate forward in browse history'],
-            ['go home', 'Go to browse Home page'],
-            ['reload', 'Reload the current page'],
-            ['scroll up', 'Scroll the page upward'],
-            ['scroll down', 'Scroll the page downward'],
-            ['click / select', 'Activate the current target'],
-            ['pause control', 'Freeze pointer and gestures'],
-            ['resume control', 'Restore tracking'],
-            ['stop session', 'Stop tracking and release camera/mic'],
-            ['start dictation', 'Enter voice typing mode'],
+            ['open home', 'Return to the browse home page'],
+            ['click', 'Activate the highlighted target via IntentGuard'],
+            ['select', 'Select the highlighted target via IntentGuard'],
+            ['confirm', 'Confirm a pending sensitive action'],
+            ['cancel', 'Cancel a pending action'],
+            ['start listening', 'Enable voice recognition'],
+            ['stop listening', 'Disable voice recognition'],
+            ['enable light mode', 'Switch the interface to light mode'],
+            ['enable dark mode', 'Switch the interface to dark mode'],
+            ['reload', 'Reload the current browse page'],
+            ['start dictation', 'Type into the focused text field'],
             ['stop dictation', 'Exit voice typing mode'],
           ].map(([cmd, desc], i) => (
             <div key={i} className="bg-card border border-white/5 rounded-xl px-4 py-3 flex items-start gap-3">

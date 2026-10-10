@@ -92,7 +92,7 @@ export const EvaluationView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-8">
+    <div className="flex-1 overflow-y-auto bg-background p-8" data-handsfree-scroll-container>
       <div className="max-w-6xl mx-auto space-y-8">
         
         {/* Header */}
@@ -190,7 +190,7 @@ export const EvaluationView: React.FC = () => {
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    Handsfree
+                    HandsFree
                   </button>
                 </div>
 
@@ -317,7 +317,7 @@ export const EvaluationView: React.FC = () => {
                         <tr>
                           <th className="text-left font-medium text-slate-400 py-3 px-4">Metric</th>
                           <th className="text-right font-medium text-blue-400 py-3 px-4">Conventional</th>
-                          <th className="text-right font-medium text-violet-400 py-3 px-4">Handsfree</th>
+                          <th className="text-right font-medium text-violet-400 py-3 px-4">HandsFree</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5 bg-card">
@@ -367,7 +367,7 @@ export const EvaluationView: React.FC = () => {
                       </div>
                       <div>
                         <div className="flex justify-between text-sm mb-1.5">
-                          <span className="text-violet-400 font-medium">Handsfree</span>
+                          <span className="text-violet-400 font-medium">HandsFree</span>
                           <span className="text-white font-mono">{formatPercent(successRate(handsfreeTrials))}</span>
                         </div>
                         <div className="w-full bg-surface rounded-full h-2.5 overflow-hidden">

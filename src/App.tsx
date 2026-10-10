@@ -33,6 +33,58 @@ import { useIntentGuard } from './hooks/useIntentGuard';
 type ThemeMode = 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'handsfree-theme';
+const getActiveScrollContainer = () => document.querySelector<HTMLElement>('[data-handsfree-scroll-container]');
+
+const scrollActivePane = (top: number, behavior: ScrollBehavior = 'smooth') => {
+  const container = getActiveScrollContainer();
+  if (container) {
+    container.scrollBy({ top, behavior });
+  } else {
+    window.scrollBy({ top, behavior });
+  }
+};
+
+const getActiveTextField = (): HTMLInputElement | HTMLTextAreaElement | null => {
+  const element = document.activeElement;
+  if (element instanceof HTMLTextAreaElement) {
+    return element.disabled || element.readOnly ? null : element;
+  }
+  if (element instanceof HTMLInputElement) {
+    const textTypes = ['text', 'search', 'email', 'tel', 'url', 'password', 'number'];
+    return element.disabled || element.readOnly || !textTypes.includes(element.type) ? null : element;
+  }
+  return null;
+};
+
+const setTextFieldValue = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+  const prototype = field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+  const valueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+  if (valueSetter) valueSetter.call(field, value);
+  else field.value = value;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+const insertDictatedText = (text: string): boolean => {
+  const field = getActiveTextField();
+  const content = text.trim();
+  if (!field || !content) return false;
+
+  const start = field.selectionStart ?? field.value.length;
+  const end = field.selectionEnd ?? start;
+  const prefix = field.value.slice(0, start);
+  const separator = prefix && !/\s$/.test(prefix) && !/^[,.;:!?)]/.test(content) ? ' ' : '';
+  const insertion = `${separator}${content}`;
+  const nextValue = `${field.value.slice(0, start)}${insertion}${field.value.slice(end)}`;
+  setTextFieldValue(field, nextValue);
+
+  try {
+    const caret = start + insertion.length;
+    field.setSelectionRange(caret, caret);
+  } catch {
+    // Some input types do not support selection ranges.
+  }
+  return true;
+};
 
 const getInitialTheme = (): ThemeMode => {
   if (typeof window === 'undefined') return 'dark';
@@ -45,9 +97,12 @@ export const App: React.FC = () => {
   // ---- State ----
   const [activeTab, setActiveTab] = useState<SidebarTab>('dashboard');
   const [settings, setSettings] = useState<HandsfreeSettings>(() => loadSettings());
+  const settingsRef = useRef(settings);
   const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
   const [isTracking, setIsTracking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isDictating, setIsDictating] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [interactionState, setInteractionState] = useState<InteractionState>('idle');
   const [commandHistory, _setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   void _setCommandHistory;
@@ -55,6 +110,10 @@ export const App: React.FC = () => {
 
   const [pointerPosition, setPointerPosition] = useState<PointerPosition | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   // Broadcast click to WebSocket bridge only (no extension window.postMessage)
   const broadcastClick = useCallback(() => {
@@ -112,9 +171,12 @@ export const App: React.FC = () => {
   });
   const lastHealthUpdateRef = useRef<number>(0);
   const lastScrollY = useRef<number | null>(null);
+  const scrollGestureActiveRef = useRef(false);
   const pendingScrollDeltaYRef = useRef<number>(0);
   const scrollRafIdRef = useRef<number | null>(null);
   const isPausedRef = useRef<boolean>(false);
+  const trackingStartRequestRef = useRef(0);
+  const trackingStartInProgressRef = useRef(false);
 
   // Smooth scroll animator using requestAnimationFrame
   const startScrollDrain = useCallback(() => {
@@ -125,10 +187,12 @@ export const App: React.FC = () => {
         const step = pendingScrollDeltaYRef.current * 0.35;
         pendingScrollDeltaYRef.current -= step;
 
-        // Target the browse viewport if mounted, otherwise fall back to window
-        const browseViewport = document.getElementById('browse-viewport') as HTMLElement | null;
-        const target: Element | Window = browseViewport ?? window;
-        target.scrollBy({ top: step, behavior: 'auto' });
+        const target = getActiveScrollContainer();
+        if (target) {
+          target.scrollTop += step;
+        } else {
+          window.scrollBy({ top: step, behavior: 'instant' });
+        }
 
         scrollRafIdRef.current = requestAnimationFrame(drain);
       } else {
@@ -196,14 +260,15 @@ export const App: React.FC = () => {
           }
 
           const service = mode === 'head' ? headTrackingService : trackingService;
+          const activeSettings = settingsRef.current;
           const mapped = service.applySmoothing(
             coords.x,
             coords.y,
             window.innerWidth,
             window.innerHeight,
-            settings.smoothing,
-            settings.sensitivity,
-            settings.deadZone
+            activeSettings.smoothing,
+            activeSettings.sensitivity,
+            activeSettings.deadZone
           );
 
           setPointerPosition({
@@ -216,19 +281,20 @@ export const App: React.FC = () => {
 
           // Hand scrolling logic: coalesced via requestAnimationFrame
           if (coords.gesture === 'scroll') {
-            if (lastScrollY.current !== null) {
-              const deltaY = mapped.y - lastScrollY.current;
-              if (Math.abs(deltaY) > settings.scrollDeadZone) {
-                pendingScrollDeltaYRef.current += deltaY * (settings.scrollSensitivity * 0.4);
-                startScrollDrain();
-                lastScrollY.current = mapped.y;
-              }
+            if (!scrollGestureActiveRef.current || lastScrollY.current === null) {
+              scrollGestureActiveRef.current = true;
+              lastScrollY.current = mapped.y;
             } else {
+              const deltaY = mapped.y - lastScrollY.current;
+              if (Math.abs(deltaY) > activeSettings.scrollDeadZone) {
+                pendingScrollDeltaYRef.current += deltaY * (activeSettings.scrollSensitivity * 0.4);
+                startScrollDrain();
+              }
               lastScrollY.current = mapped.y;
             }
           } else {
+            scrollGestureActiveRef.current = false;
             lastScrollY.current = mapped.y;
-            pendingScrollDeltaYRef.current = 0;
           }
 
           // Send to WebSocket bridge (for evaluation/testing) — no extension postMessage
@@ -258,6 +324,7 @@ export const App: React.FC = () => {
           }
         } else {
           // Tracking lost: suspend scroll immediately, cancel pending drain, and hide pointer
+          scrollGestureActiveRef.current = false;
           lastScrollY.current = null;
           pendingScrollDeltaYRef.current = 0;
           if (scrollRafIdRef.current !== null) {
@@ -287,11 +354,14 @@ export const App: React.FC = () => {
         }
       };
     },
-    [settings.smoothing, settings.sensitivity, settings.deadZone, settings.scrollSensitivity, settings.scrollDeadZone, startScrollDrain]
+    [startScrollDrain]
   );
 
   const handleStart = useCallback(async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || isTracking || trackingStartInProgressRef.current) return;
+
+    trackingStartInProgressRef.current = true;
+    const startRequest = ++trackingStartRequestRef.current;
 
     isPausedRef.current = false;
     setInteractionState('tracking');
@@ -302,6 +372,49 @@ export const App: React.FC = () => {
       message: 'Requesting camera access...',
     }));
 
+    if (settings.trackingMode === 'combined') {
+      trackingStartInProgressRef.current = false;
+      setIsTracking(false);
+      setInteractionState('error');
+      setTrackingHealth((prev) => ({
+        ...prev,
+        isTracking: false,
+        message: 'Combined tracking is not available yet. Choose hand, head, or voice.',
+      }));
+      return;
+    }
+
+    if (settings.trackingMode === 'voice') {
+      setTrackingHealth((prev) => ({ ...prev, message: 'Starting voice control...' }));
+      const started = await voiceService.start();
+      if (startRequest !== trackingStartRequestRef.current) {
+        if (started) voiceService.stop();
+        return;
+      }
+
+      trackingStartInProgressRef.current = false;
+      if (!started) {
+        setIsTracking(false);
+        setInteractionState('error');
+        setTrackingHealth((prev) => ({
+          ...prev,
+          isTracking: false,
+          message: 'Voice control could not start. Check microphone access.',
+        }));
+        return;
+      }
+
+      setTrackingHealth({
+        isTracking: true,
+        confidence: 1,
+        fps: 0,
+        landmarksDetected: false,
+        lastUpdate: performance.now(),
+        message: 'Voice control active',
+      });
+      return;
+    }
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -310,14 +423,22 @@ export const App: React.FC = () => {
       setPermissionStatus((p) => ({ ...p, camera: 'granted' }));
       setMediaStream(stream);
     } catch {
-      setPermissionStatus((p) => ({ ...p, camera: 'denied' }));
-      setIsTracking(false);
-      setInteractionState('error');
-      setTrackingHealth((prev) => ({
-        ...prev,
-        isTracking: false,
-        message: 'Camera access denied.',
-      }));
+      if (startRequest === trackingStartRequestRef.current) {
+        trackingStartInProgressRef.current = false;
+        setPermissionStatus((p) => ({ ...p, camera: 'denied' }));
+        setIsTracking(false);
+        setInteractionState('error');
+        setTrackingHealth((prev) => ({
+          ...prev,
+          isTracking: false,
+          message: 'Camera access denied.',
+        }));
+      }
+      return;
+    }
+
+    if (startRequest !== trackingStartRequestRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
       return;
     }
 
@@ -330,13 +451,23 @@ export const App: React.FC = () => {
 
     const callback = makeTrackingCallback(mode === 'head' ? 'head' : 'hand');
 
-    let success: boolean;
-    if (mode === 'head') {
-      success = await headTrackingService.start(videoRef.current, stream, callback);
-    } else {
-      success = await trackingService.start(videoRef.current, stream, callback);
+    let success = false;
+    try {
+      if (mode === 'head') {
+        success = await headTrackingService.start(videoRef.current, stream, callback);
+      } else {
+        success = await trackingService.start(videoRef.current, stream, callback);
+      }
+    } catch {
+      success = false;
     }
 
+    if (startRequest !== trackingStartRequestRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
+    trackingStartInProgressRef.current = false;
     if (!success) {
       // Release the camera if tracking failed to start
       stream.getTracks().forEach((t) => t.stop());
@@ -349,9 +480,10 @@ export const App: React.FC = () => {
         message: `${modelLabel} initialization failed.`,
       }));
     }
-  }, [settings.trackingMode, makeTrackingCallback]);
+  }, [settings.trackingMode, makeTrackingCallback, isTracking]);
 
   const handlePause = useCallback(() => {
+    if (!isTracking || interactionState === 'paused' || interactionState === 'error') return false;
     setInteractionState('paused');
     isPausedRef.current = true;
 
@@ -360,6 +492,7 @@ export const App: React.FC = () => {
     service.pause();
 
     lastScrollY.current = null;
+    scrollGestureActiveRef.current = false;
     pendingScrollDeltaYRef.current = 0;
     if (scrollRafIdRef.current !== null) {
       cancelAnimationFrame(scrollRafIdRef.current);
@@ -368,26 +501,35 @@ export const App: React.FC = () => {
 
     setPointerPosition(null);
     getWsClient()?.send({ type: 'HANDSFREE_BROADCAST', payload: { x: 0, y: 0, normX: 0, normY: 0, isTracking: false } });
-  }, [settings.trackingMode]);
+    return true;
+  }, [settings.trackingMode, isTracking, interactionState]);
 
   const handleResume = useCallback(() => {
+    if (!isTracking || interactionState !== 'paused') return false;
     isPausedRef.current = false;
     setInteractionState('tracking');
 
     lastScrollY.current = null;
+    scrollGestureActiveRef.current = false;
     pendingScrollDeltaYRef.current = 0;
 
     // Resume active tracking service with fresh frame calibration
     const service = settings.trackingMode === 'head' ? headTrackingService : trackingService;
     service.resume();
-  }, [settings.trackingMode]);
+    return true;
+  }, [settings.trackingMode, isTracking, interactionState]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback((stopListening = true) => {
+    trackingStartRequestRef.current += 1;
+    trackingStartInProgressRef.current = false;
     isPausedRef.current = false;
     trackingService.stop();
     headTrackingService.stop();
-    voiceService.stop();
-    setIsListening(false);
+    if (stopListening) {
+      voiceService.stop();
+      setIsListening(false);
+      setIsDictating(false);
+    }
 
     // Release camera tracks cleanly
     if (mediaStream) {
@@ -439,6 +581,7 @@ export const App: React.FC = () => {
   const handleToggleListening = useCallback(() => {
     if (isListening) {
       voiceService.stop();
+      setIsDictating(false);
     } else {
       voiceService.start();
     }
@@ -458,20 +601,42 @@ export const App: React.FC = () => {
         // Execute command logic
         if (command.type === 'control') {
           if (command.parsed === 'pause control') {
-            handlePause();
-            executed = true;
+            executed = handlePause();
           } else if (command.parsed === 'resume control') {
-            handleResume();
+            executed = handleResume();
+          } else if (command.parsed === 'start listening') {
+            setVoiceError(null);
+            void voiceService.start();
+            executed = true;
+          } else if (command.parsed === 'stop listening') {
+            voiceService.stop();
+            setIsDictating(false);
+            executed = true;
+          } else if (command.parsed === 'enable light mode') {
+            setTheme('light');
+            executed = true;
+          } else if (command.parsed === 'enable dark mode') {
+            setTheme('dark');
             executed = true;
           } else if (command.parsed === 'start dictation') {
-            executed = true;
+            if (getActiveTextField()) {
+              setVoiceError(null);
+              setIsDictating(true);
+              executed = true;
+            } else {
+              voiceService.setDictationMode(false);
+              setIsDictating(false);
+              setVoiceError('Focus a text field before starting dictation.');
+            }
           } else if (command.parsed === 'stop dictation') {
+            voiceService.setDictationMode(false);
+            setIsDictating(false);
             executed = true;
           } else if (command.parsed === 'start session') {
             handleStart();
             executed = true;
           } else if (command.parsed === 'stop session') {
-            handleStop();
+            handleStop(false);
             executed = true;
           }
         } else if (command.type === 'navigation') {
@@ -480,7 +645,7 @@ export const App: React.FC = () => {
             if (activeTab === 'browse') {
               window.dispatchEvent(new CustomEvent('handsfree:scroll', { detail: { direction: 'down' } }));
             } else {
-              window.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
+              scrollActivePane((getActiveScrollContainer()?.clientHeight ?? window.innerHeight) * 0.5);
             }
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'scroll down' });
             executed = true;
@@ -488,37 +653,39 @@ export const App: React.FC = () => {
             if (activeTab === 'browse') {
               window.dispatchEvent(new CustomEvent('handsfree:scroll', { detail: { direction: 'up' } }));
             } else {
-              window.scrollBy({ top: -window.innerHeight / 2, behavior: 'smooth' });
+              scrollActivePane(-(getActiveScrollContainer()?.clientHeight ?? window.innerHeight) * 0.5);
             }
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'scroll up' });
             executed = true;
           } else if (command.parsed === 'scroll to top') {
-            const vp = document.getElementById('browse-viewport');
-            (vp ?? window).scrollTo({ top: 0, behavior: 'smooth' });
+            const container = getActiveScrollContainer();
+            if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
+            else window.scrollTo({ top: 0, behavior: 'smooth' });
             executed = true;
           } else if (command.parsed === 'scroll to bottom') {
-            const vp = document.getElementById('browse-viewport');
-            if (vp) {
-              vp.scrollTo({ top: vp.scrollHeight, behavior: 'smooth' });
+            const container = getActiveScrollContainer();
+            if (container) {
+              container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
             } else {
               window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             }
             executed = true;
           } else if (command.parsed === 'go back') {
-            // Dispatch to BrowseWorkspace internal history
+            setActiveTab('browse');
             window.dispatchEvent(new CustomEvent('handsfree:back'));
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'go back' });
             executed = true;
           } else if (command.parsed === 'go forward') {
+            setActiveTab('browse');
             window.dispatchEvent(new CustomEvent('handsfree:forward'));
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'go forward' });
             executed = true;
           } else if (command.parsed === 'open home') {
-            // Switch to browse tab first, then navigate home within workspace
             setActiveTab('browse');
             window.dispatchEvent(new CustomEvent('handsfree:home'));
             executed = true;
           } else if (command.parsed === 'reload') {
+            setActiveTab('browse');
             window.dispatchEvent(new CustomEvent('handsfree:reload'));
             executed = true;
           } else if (command.parsed === 'go to browse') {
@@ -530,29 +697,22 @@ export const App: React.FC = () => {
           }
         } else if (command.type === 'action') {
           if (command.parsed === 'click' || command.parsed === 'select' || command.parsed === 'confirm' || command.parsed === 'cancel') {
-            // Delegate to IntentGuard for safe activation
-            intentGuardRef.current.handleVoiceCommand(command);
-            executed = true;
-
-            if (command.parsed === 'click' || command.parsed === 'select') {
-              broadcastClick();
-            }
+            executed = intentGuardRef.current.handleVoiceCommand(command);
           } else if (command.parsed === 'clear text') {
-            const el = document.activeElement;
-            if (el && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
-              el.value = '';
-              el.dispatchEvent(new Event('input', { bubbles: true }));
+            const field = getActiveTextField();
+            if (field) {
+              setTextFieldValue(field, '');
+              try {
+                field.setSelectionRange(0, 0);
+              } catch {
+                // Some input types do not support selection ranges.
+              }
               executed = true;
             }
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'clear text' });
           }
         } else if (command.type === 'dictation') {
-          const el = document.activeElement;
-          if (el && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
-            el.value = el.value ? el.value + ' ' + command.parsed : command.parsed;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            executed = true;
-          }
+          executed = insertDictatedText(command.parsed);
           getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'dictate', text: command.parsed });
         }
 
@@ -574,18 +734,38 @@ export const App: React.FC = () => {
         // We could show real-time transcript here, but command history covers the final commands well.
       },
       (err) => {
-        if (err === 'not-allowed') {
+        setIsDictating(false);
+        if (settings.trackingMode === 'voice' && isTracking) {
+          setIsTracking(false);
+          setInteractionState('error');
+          setTrackingHealth((previous) => ({
+            ...previous,
+            isTracking: false,
+            message: 'Voice session stopped because recognition failed.',
+          }));
+        }
+        if (err === 'not-allowed' || err === 'service-not-allowed') {
           setPermissionStatus(p => ({ ...p, microphone: 'denied' }));
+          setVoiceError('Microphone access was denied. Allow microphone access in your browser and try again.');
+        } else if (err === 'unsupported') {
+          setVoiceError('Voice recognition is not supported in this browser.');
+        } else if (err === 'audio-capture') {
+          setVoiceError('No microphone is available. Check that one is connected and enabled.');
+        } else if (err === 'network') {
+          setVoiceError('Voice recognition could not connect. Check your network and try again.');
+        } else {
+          setVoiceError(`Voice recognition failed (${err}). Try starting it again.`);
         }
       },
       (listening) => {
         setIsListening(listening);
         if (listening) {
+          setVoiceError(null);
           setPermissionStatus(p => ({ ...p, microphone: 'granted' }));
         }
       }
     );
-  }, [handleStart, handleStop, handlePause, handleResume, broadcastClick, activeTab]);
+  }, [handleStart, handleStop, handlePause, handleResume, broadcastClick, activeTab, settings.trackingMode, isTracking]);
 
   // Cleanup
   useEffect(() => {
@@ -603,6 +783,7 @@ export const App: React.FC = () => {
         return (
           <DashboardView
             isTracking={isTracking}
+            isListening={isListening}
             trackingHealth={trackingHealth}
             interactionState={interactionState}
             commandHistory={commandHistory}
@@ -620,13 +801,14 @@ export const App: React.FC = () => {
           />
         );
       case 'browse':
-        return <BrowseWorkspace isListening={isListening} lastVoiceCommand={lastVoiceCommand} />;
+        return null;
       case 'evaluation':
         return <EvaluationView />;
       case 'settings':
         return (
           <SettingsView
             settings={settings}
+            isTracking={isTracking}
             onSettingsChange={handleSettingsChange}
             theme={theme}
             onThemeToggle={handleThemeToggle}
@@ -681,7 +863,14 @@ export const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="flex-1 flex flex-col overflow-hidden animate-fade-in relative z-0">
-          {renderContent()}
+          {activeTab !== 'browse' && renderContent()}
+          <div className={activeTab === 'browse' ? 'flex-1 flex min-h-0' : 'hidden'}>
+            <BrowseWorkspace
+              isActive={activeTab === 'browse'}
+              isListening={isListening}
+              lastVoiceCommand={lastVoiceCommand}
+            />
+          </div>
         </main>
       </div>
 
@@ -690,6 +879,8 @@ export const App: React.FC = () => {
         isTracking={isTracking}
         interactionState={interactionState}
         isListening={isListening}
+        isDictating={isDictating}
+        voiceError={voiceError}
         onStart={handleStart}
         onPause={handlePause}
         onResume={handleResume}

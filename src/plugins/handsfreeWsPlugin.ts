@@ -1,12 +1,12 @@
 import type { Plugin, ViteDevServer } from 'vite';
 import { WebSocketServer, WebSocket } from 'ws';
 
-const WS_PORT = 5174;
+const WS_PORT = 5187;
 
 /**
  * Handsfree WebSocket Bridge Plugin
  *
- * Creates a dedicated WebSocket server on port 5174 that acts as a
+ * Creates a dedicated WebSocket server on port 5187 that acts as a
  * real-time relay hub between:
  *   - The Handsfree React app (SOURCE) sending tracking data
  *   - Chrome Extension content scripts (TARGETS) on other tabs
@@ -21,7 +21,6 @@ export function handsfreeWsPlugin(): Plugin {
   let wss: WebSocketServer | null = null;
   const clients = new Set<WebSocket>();
   let lastBroadcastState: unknown = null;
-
   function startWss() {
     wss = new WebSocketServer({ port: WS_PORT });
 
@@ -74,8 +73,7 @@ export function handsfreeWsPlugin(): Plugin {
 
     wss.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
-        console.warn(`  [Handsfree WS] Port ${WS_PORT} in use — retrying in 2s`);
-        setTimeout(startWss, 2000);
+        console.error(`  [Handsfree WS] Port ${WS_PORT} is occupied; bridge is unavailable until it is freed.`);
       } else {
         console.error('[Handsfree WS] Server error:', err);
       }

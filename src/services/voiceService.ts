@@ -8,6 +8,7 @@ export type VoiceStatusCallback = (isListening: boolean) => void;
 class VoiceService {
   private recognition: any = null;
   private isListening: boolean = false;
+  private isStarting: boolean = false;
   private shouldBeListening: boolean = false;
   private isDictationMode: boolean = false;
   private lastCommandTime: number = 0;
@@ -63,20 +64,16 @@ class VoiceService {
 
       this.recognition.onerror = (event: any) => {
         const error = event.error;
-        if (error === 'no-speech') {
-          // Expected background silence timeout; do not report as fatal error
+        if (error === 'no-speech' || error === 'aborted') {
           return;
         }
 
-        if (error === 'not-allowed' || error === 'service-not-allowed') {
-          this.shouldBeListening = false;
-          this.isListening = false;
-          if (this.onErrorCallback) this.onErrorCallback('not-allowed');
-          if (this.onStatusCallback) this.onStatusCallback(false);
-          return;
-        }
-
+        this.shouldBeListening = false;
+        this.isListening = false;
+        this.isDictationMode = false;
+        if (this.restartTimer) clearTimeout(this.restartTimer);
         if (this.onErrorCallback) this.onErrorCallback(error);
+        if (this.onStatusCallback) this.onStatusCallback(false);
       };
 
       this.recognition.onresult = (event: any) => {
@@ -119,40 +116,47 @@ class VoiceService {
   /**
    * Starts speech recognition with explicit microphone permission request on first use.
    */
-  public async start() {
+  public async start(): Promise<boolean> {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       if (this.onErrorCallback) this.onErrorCallback('unsupported');
-      return;
+      return false;
     }
+
+    if (this.isListening || this.shouldBeListening || this.isStarting) return true;
 
     if (!this.recognition) {
       this.initRecognition();
     }
+    if (!this.recognition) {
+      if (this.onErrorCallback) this.onErrorCallback('unsupported');
+      return false;
+    }
 
-    // Explicit microphone permission check
+    this.isStarting = true;
+    this.shouldBeListening = true;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         // Cleanly release probe tracks
         testStream.getTracks().forEach((track) => track.stop());
       }
-    } catch {
+      if (!this.shouldBeListening) return false;
+      this.recognition.start();
+      return true;
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'unknown';
+      const stillRequested = this.shouldBeListening;
       this.shouldBeListening = false;
       this.isListening = false;
-      if (this.onErrorCallback) this.onErrorCallback('not-allowed');
+      if (stillRequested && this.onErrorCallback) {
+        this.onErrorCallback(errorName === 'NotAllowedError' ? 'not-allowed' : errorName);
+      }
       if (this.onStatusCallback) this.onStatusCallback(false);
-      return;
-    }
-
-    if (this.isListening) return;
-
-    this.shouldBeListening = true;
-    try {
-      this.recognition.start();
-    } catch (e) {
-      console.warn('Voice start warning:', e);
+      return false;
+    } finally {
+      this.isStarting = false;
     }
   }
 
@@ -162,6 +166,7 @@ class VoiceService {
   public stop() {
     this.shouldBeListening = false;
     this.isListening = false;
+    this.isDictationMode = false;
 
     if (this.restartTimer) {
       clearTimeout(this.restartTimer);
@@ -206,10 +211,18 @@ class VoiceService {
       parsed = 'start session'; type = 'control';
     } else if (transcript.includes('stop session')) {
       parsed = 'stop session'; type = 'control';
+    } else if (transcript.includes('start listening')) {
+      parsed = 'start listening'; type = 'control';
+    } else if (transcript.includes('stop listening')) {
+      parsed = 'stop listening'; type = 'control';
     } else if (transcript.includes('pause control')) {
       parsed = 'pause control'; type = 'control';
     } else if (transcript.includes('resume control')) {
       parsed = 'resume control'; type = 'control';
+    } else if (transcript.includes('enable light mode') || transcript === 'light mode') {
+      parsed = 'enable light mode'; type = 'control';
+    } else if (transcript.includes('enable dark mode') || transcript === 'dark mode') {
+      parsed = 'enable dark mode'; type = 'control';
     } else if (transcript.includes('start dictation') || transcript.includes('start typing')) {
       parsed = 'start dictation'; type = 'control';
       this.isDictationMode = true;
@@ -233,7 +246,9 @@ class VoiceService {
       parsed = 'go to browse'; type = 'navigation';
     } else if (transcript.includes('go to settings') || transcript.includes('open settings')) {
       parsed = 'go to settings'; type = 'navigation';
-    } else if (transcript.includes('click') || transcript.includes('select')) {
+    } else if (transcript.includes('select')) {
+      parsed = 'select'; type = 'action';
+    } else if (transcript.includes('click')) {
       parsed = 'click'; type = 'action';
     } else if (transcript.includes('confirm')) {
       parsed = 'confirm'; type = 'action';

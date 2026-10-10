@@ -15,6 +15,7 @@ type PageId = 'home' | 'about' | 'search' | 'form' | 'features';
 export interface BrowseWorkspaceProps {
   isListening?: boolean;
   lastVoiceCommand?: string | null;
+  isActive?: boolean;
 }
 
 const pageNames: Record<PageId, string> = {
@@ -29,12 +30,12 @@ const pageNames: Record<PageId, string> = {
 const BrowseWorkspaceInner: React.FC<BrowseWorkspaceProps> = ({
   isListening = false,
   lastVoiceCommand = null,
+  isActive = true,
 }) => {
   const { scrollContainerRef } = useBrowseContext();
 
-  const [currentPage, setCurrentPage] = useState<PageId>('home');
-  const [history, setHistory] = useState<PageId[]>(['home']);
-  const [historyIndex, setHistoryIndex] = useState(0);
+  const [history, setHistory] = useState<{ pages: PageId[]; index: number }>({ pages: ['home'], index: 0 });
+  const currentPage = history.pages[history.index];
   const [notification, setNotification] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,40 +47,30 @@ const BrowseWorkspaceInner: React.FC<BrowseWorkspaceProps> = ({
   }, []);
 
   const navigate = useCallback((page: PageId) => {
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push(page);
-      setHistoryIndex(newHistory.length - 1);
-      return newHistory;
+    setHistory(previous => {
+      const pages = previous.pages.slice(0, previous.index + 1);
+      pages.push(page);
+      return { pages, index: pages.length - 1 };
     });
-    setCurrentPage(page);
     // Reset scroll position on navigation
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
-  }, [historyIndex, scrollContainerRef]);
+  }, [scrollContainerRef]);
 
   const goBack = useCallback(() => {
-    setHistory(prev => {
-      const newIndex = historyIndex - 1;
-      if (newIndex < 0) return prev;
-      setHistoryIndex(newIndex);
-      setCurrentPage(prev[newIndex]);
-      return prev;
-    });
+    setHistory(previous => previous.index > 0
+      ? { ...previous, index: previous.index - 1 }
+      : previous);
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
-  }, [historyIndex, scrollContainerRef]);
+  }, [scrollContainerRef]);
 
   const goForward = useCallback(() => {
-    setHistory(prev => {
-      const newIndex = historyIndex + 1;
-      if (newIndex >= prev.length) return prev;
-      setHistoryIndex(newIndex);
-      setCurrentPage(prev[newIndex]);
-      return prev;
-    });
+    setHistory(previous => previous.index < previous.pages.length - 1
+      ? { ...previous, index: previous.index + 1 }
+      : previous);
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
-  }, [historyIndex, scrollContainerRef]);
+  }, [scrollContainerRef]);
 
   const goHome = useCallback(() => navigate('home'), [navigate]);
 
@@ -128,8 +119,8 @@ const BrowseWorkspaceInner: React.FC<BrowseWorkspaceProps> = ({
     if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
   }, []);
 
-  const canGoBack = historyIndex > 0;
-  const canGoForward = historyIndex < history.length - 1;
+  const canGoBack = history.index > 0;
+  const canGoForward = history.index < history.pages.length - 1;
 
   const renderPage = () => {
     switch (currentPage) {
@@ -242,8 +233,9 @@ const BrowseWorkspaceInner: React.FC<BrowseWorkspaceProps> = ({
       {/* Page Content — stable ref for hand scroll */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-6 scroll-smooth"
+        className="flex-1 overflow-y-auto p-6"
         id="browse-viewport"
+        data-handsfree-scroll-container={isActive ? '' : undefined}
       >
         {renderPage()}
       </div>

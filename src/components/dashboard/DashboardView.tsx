@@ -13,6 +13,7 @@ import { headTrackingService } from '../../services/headTrackingService';
 
 interface DashboardViewProps {
   isTracking: boolean;
+  isListening: boolean;
   trackingHealth: TrackingHealth;
   interactionState: InteractionState;
   commandHistory: CommandHistoryEntry[];
@@ -31,6 +32,7 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   isTracking,
+  isListening,
   trackingHealth,
   interactionState,
   commandHistory,
@@ -67,9 +69,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (settings.trackingMode === 'head') {
       headTrackingService.setDebugCanvas(canvas);
       trackingService.setDebugCanvas(null);
-    } else {
+      } else if (settings.trackingMode === 'hand') {
       trackingService.setDebugCanvas(canvas);
       headTrackingService.setDebugCanvas(null);
+      } else {
+        trackingService.setDebugCanvas(null);
+        headTrackingService.setDebugCanvas(null);
     }
     return () => {
       trackingService.setDebugCanvas(null);
@@ -79,17 +84,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const pointerLabel = pointerPosition
     ? `${Math.round(pointerPosition.x)}, ${Math.round(pointerPosition.y)}`
-    : '--, --';
+    : settings.trackingMode === 'voice' ? 'Voice only' : '--, --';
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-background text-primary">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-card border border-surface rounded-3xl p-10 flex flex-col items-center justify-center text-center shadow-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent pointer-events-none" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
+    <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-background text-primary" data-handsfree-scroll-container>
+      <div className="hero-panel relative overflow-hidden border rounded-[28px] p-10 flex flex-col items-center justify-center text-center shadow-[0_24px_80px_rgba(79,70,229,0.18)]">
+        <div className="hero-orb orb-one" />
+        <div className="hero-orb orb-two" />
+        <div className="hero-grid" />
 
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.22em] text-secondary mb-5">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.9)]" />
+          Access systems live
+        </div>
+
+        <h1 className="hero-title text-4xl md:text-5xl font-extrabold tracking-tight mb-4">
           Browse beyond boundaries.
         </h1>
         <p className="text-secondary max-w-2xl text-lg mb-6">
@@ -98,7 +107,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex gap-3">
           <button
             onClick={onStartTracking}
-            className="relative inline-flex items-center justify-center gap-2 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 bg-indigo-600 border border-transparent rounded-full shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 hover:shadow-indigo-500/25 hover:shadow-lg"
+            className="hero-button-primary relative inline-flex items-center justify-center gap-2 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 rounded-full shadow-[0_18px_45px_rgba(124,58,237,0.35)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600"
           >
             {isTracking ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             {isTracking ? 'Stop Session' : 'Start Session'}
@@ -106,7 +115,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button
             onClick={onRecalibrate}
             disabled={!isTracking}
-            className="inline-flex items-center justify-center gap-2 px-6 py-4 text-sm font-medium text-secondary transition-all duration-200 bg-surface border border-white/5 rounded-full hover:text-white hover:bg-card disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="hero-button-secondary inline-flex items-center justify-center gap-2 px-6 py-4 text-sm font-medium transition-all duration-200 rounded-full disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <Crosshair className="w-4 h-4" />
             Calibrate
@@ -131,11 +140,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Camera/Tracking Preview (Left) */}
           <div className="bg-surface/50 border border-surface rounded-xl overflow-hidden flex flex-col relative min-h-[250px]">
             <div className="absolute top-4 left-4 z-10 flex gap-2">
-              <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${isTracking ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-surface border border-surface text-secondary'}`}>
-                {isTracking ? <Camera className="w-3 h-3" /> : <CameraOff className="w-3 h-3" />}
-                {isTracking ? 'Live' : 'Camera Off'}
+              <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${isTracking && (settings.trackingMode !== 'voice' || isListening) ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-surface border border-surface text-secondary'}`}>
+                {settings.trackingMode === 'voice'
+                  ? <Mic className="w-3 h-3" />
+                  : isTracking ? <Camera className="w-3 h-3" /> : <CameraOff className="w-3 h-3" />}
+                {settings.trackingMode === 'voice'
+                  ? isListening ? 'Voice Live' : 'Voice Off'
+                  : isTracking ? 'Live' : 'Camera Off'}
               </span>
-              {isTracking && (
+              {isTracking && settings.trackingMode !== 'voice' && (
                 <span className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-mono bg-black/40 text-white/70 backdrop-blur-sm">
                   {Math.round(trackingHealth.fps)} FPS
                 </span>
@@ -143,7 +156,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex-1 flex items-center justify-center relative overflow-hidden bg-black/50">
-              {isTracking ? (
+              {settings.trackingMode === 'voice' ? (
+                <div className="text-center text-secondary relative z-10 space-y-3 px-6">
+                  <Mic className={`w-12 h-12 mx-auto ${isListening ? 'text-primary' : 'opacity-30'}`} />
+                  <p>{isTracking
+                    ? isListening ? 'Voice control is ready. Speak a command.' : 'Voice session active. Enable Voice Command to listen.'
+                    : 'Start a voice session. Camera access is not required.'}</p>
+                </div>
+              ) : isTracking ? (
                 <>
                   <video
                     ref={videoRef}
@@ -273,6 +293,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             icon={<Hand className="w-6 h-6" />}
             isActive={settings.trackingMode === 'hand'}
             onClick={() => handleModeChange('hand')}
+            disabled={isTracking}
           />
           <ModeCard
             title="Head"
@@ -281,6 +302,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             isActive={settings.trackingMode === 'head'}
             onClick={() => handleModeChange('head')}
             badge="Experimental"
+            disabled={isTracking}
           />
           <ModeCard
             title="Voice"
@@ -288,6 +310,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             icon={<MessageSquare className="w-6 h-6" />}
             isActive={settings.trackingMode === 'voice'}
             onClick={() => handleModeChange('voice')}
+            disabled={isTracking}
           />
           <ModeCard
             title="Combined"
@@ -296,6 +319,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             isActive={settings.trackingMode === 'combined'}
             onClick={() => handleModeChange('combined')}
             badge="Coming Soon"
+            disabled
           />
         </div>
       </div>
@@ -309,8 +333,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <h3 className="text-lg font-bold">Command Center</h3>
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-secondary">Listening</span>
-              <div className={`w-2.5 h-2.5 rounded-full ${permissionStatus.microphone === 'granted' && isTracking ? 'bg-red-500 animate-pulse' : 'bg-surface'}`} />
+              <span className="text-secondary">{isListening ? 'Listening' : 'Voice off'}</span>
+              <div className={`w-2.5 h-2.5 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-surface'}`} />
             </div>
           </div>
 
@@ -409,17 +433,19 @@ function MetricCard({ label, value, icon }: { label: string; value: string; icon
   );
 }
 
-function ModeCard({ title, description, icon, isActive, onClick, badge }: {
-  title: string; description: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; badge?: string;
+function ModeCard({ title, description, icon, isActive, onClick, badge, disabled = false }: {
+  title: string; description: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; badge?: string; disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
+      aria-pressed={isActive}
       className={`text-left p-5 rounded-xl border transition-all duration-200 relative ${
         isActive
           ? 'bg-indigo-500/10 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]'
           : 'bg-card border-surface hover:border-indigo-500/30 hover:bg-surface/50'
-      }`}
+      } ${disabled ? 'opacity-50 cursor-not-allowed hover:bg-card hover:border-surface' : 'cursor-pointer'}`}
     >
       {badge && (
         <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">

@@ -12,10 +12,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onAction }) => {
       {/* Hero */}
       <div className="text-center py-10 border-b border-white/5">
         <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-full px-4 py-1.5 text-primary text-xs font-semibold mb-4">
-          <Hand size={12} /> Hands-Free Demo Environment
+          <Hand size={12} /> HandsFree Demo Environment
         </div>
         <h1 className="text-4xl font-bold text-white mb-4 leading-tight">
-          Welcome to the<br />Handsfree Workspace
+          Welcome to the<br />HandsFree Workspace
         </h1>
         <p className="text-slate-300 text-lg leading-relaxed max-w-xl mx-auto">
           Navigate, click, scroll and type using only hand gestures, head movement or voice.
@@ -45,7 +45,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onAction }) => {
       <div>
         <h2 className="text-xl font-semibold text-white mb-4">Browse Pages</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <NavCard title="About" description="Learn about the Handsfree project and our team." icon={<BookOpen className="w-7 h-7" />} onClick={() => onNavigate('about')} />
+          <NavCard title="About" description="Learn about the HandsFree project and our team." icon={<BookOpen className="w-7 h-7" />} onClick={() => onNavigate('about')} />
           <NavCard title="Search" description="Try voice typing in the search field." icon={<Search className="w-7 h-7" />} onClick={() => onNavigate('search')} />
           <NavCard title="Sample Form" description="Fill out a form using voice and gesture input." icon={<FileText className="w-7 h-7" />} onClick={() => onNavigate('form')} />
           <NavCard title="Features" description="Explore full capabilities and interaction modes." icon={<Star className="w-7 h-7" />} onClick={() => onNavigate('features')} />
@@ -129,7 +129,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onAction }) => {
 
       {/* Extra scroll content */}
       <div className="text-center py-8 text-slate-600 text-sm border-t border-white/5">
-        <p>Handsfree Demo Workspace · All processing local · No data uploaded</p>
+        <p>HandsFree Demo Workspace · All processing local · No data uploaded</p>
       </div>
     </div>
   );

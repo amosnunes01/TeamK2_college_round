@@ -34,6 +34,7 @@ export function useIntentGuard({
   const dwellStartTime = useRef<number>(0);
   const animationFrameId = useRef<number | null>(null);
   const lastTargetElement = useRef<HTMLElement | null>(null);
+  const isTrackingRef = useRef(isTracking);
   const pointerPositionRef = useRef<PointerPosition | null>(pointerPosition);
   const settingsRef = useRef(settings);
   const stateRef = useRef(interactionState);
@@ -41,6 +42,7 @@ export function useIntentGuard({
 
   // Sync refs
   useEffect(() => { pointerPositionRef.current = pointerPosition; }, [pointerPosition]);
+  useEffect(() => { isTrackingRef.current = isTracking; }, [isTracking]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => {
     stateRef.current = interactionState;
@@ -129,7 +131,7 @@ export function useIntentGuard({
 
     setTimeout(() => {
       if (stateRef.current !== 'paused' && stateRef.current !== 'error') {
-        setInteractionState('tracking');
+        setInteractionState(isTrackingRef.current ? 'tracking' : 'idle');
       }
       setPendingAction(null);
     }, 500); // Executing state duration
@@ -148,42 +150,53 @@ export function useIntentGuard({
   }, [executeAction, setInteractionState]);
 
   // Command handlers
-  const handleVoiceCommand = useCallback((command: VoiceCommand) => {
-    if (!isTracking || stateRef.current === 'paused' || stateRef.current === 'error') return;
-
-    // Safety: prevent voice click while actively scrolling
-    if (pointerPositionRef.current?.gesture === 'scroll') {
-      return;
-    }
-
+  const handleVoiceCommand = (command: VoiceCommand): boolean => {
     if (command.parsed === 'click' || command.parsed === 'select') {
-      // Execute click on current target
-      if (currentTarget) {
-        const action: PendingAction = {
-          id: crypto.randomUUID(),
-          target: currentTarget,
-          action: 'click',
-          createdAt: Date.now(),
-          dwellProgress: 1,
-          confirmed: false
-        };
-        triggerActivation(action);
-      }
+      if (stateRef.current === 'paused' || stateRef.current === 'error') return false;
+      if (isTrackingRef.current && pointerPositionRef.current?.gesture === 'scroll') return false;
+
+      const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const focusedTarget = focused?.matches('button, a, input, textarea, select, [role="button"], [tabindex]')
+        ? focused
+        : null;
+      const element = currentTarget?.element ?? focusedTarget;
+      if (!element) return false;
+
+      const target: TargetElement = currentTarget ?? {
+        id: element.id || element.dataset.handsfreeTarget || crypto.randomUUID(),
+        element,
+        label: element.innerText || element.getAttribute('aria-label') || element.getAttribute('name') || 'Focused element',
+        type: getTargetType(element),
+        rect: element.getBoundingClientRect(),
+      };
+      triggerActivation({
+        id: crypto.randomUUID(),
+        target,
+        action: 'click',
+        createdAt: Date.now(),
+        dwellProgress: 1,
+        confirmed: false,
+      });
+      return true;
     } else if (command.parsed === 'confirm') {
       if (stateRef.current === 'pendingConfirmation' && pendingAction) {
         executeAction({ ...pendingAction, confirmed: true });
+        return true;
       }
     } else if (command.parsed === 'cancel') {
       if (stateRef.current === 'pendingConfirmation' && pendingAction) {
         logActivation(pendingAction, 'cancelled', 'User voice cancel');
-        setInteractionState('tracking');
+        setInteractionState(isTrackingRef.current ? 'tracking' : 'idle');
         setPendingAction(null);
+        return true;
       } else if (stateRef.current === 'targeted') {
         // Just reset dwell
         dwellStartTime.current = Date.now();
+        return true;
       }
     }
-  }, [isTracking, currentTarget, triggerActivation, pendingAction, executeAction, logActivation, setInteractionState]);
+    return false;
+  };
 
   // Main targeting and dwell loop
   useEffect(() => {

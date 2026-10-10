@@ -2,7 +2,7 @@
  * Handsfree WebSocket Bridge Client
  *
  * Runs inside the React app and sends tracking data to the local
- * WebSocket server (port 5174), which then relays it to extension
+ * WebSocket server (port 5187), which then relays it to extension
  * content scripts running in other browser tabs.
  *
  * Architecture:
@@ -10,7 +10,8 @@
  *             → Extension content scripts in ALL tabs (any origin)
  */
 
-const WS_URL = 'ws://localhost:5174/?role=source';
+const WS_PORT = 5187;
+const WS_URL = `ws://localhost:${WS_PORT}/?role=source`;
 const RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 

@@ -17,12 +17,11 @@ const tabs: { id: SidebarTab; label: string; icon: React.ElementType }[] = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   return (
-    <aside className="w-16 md:w-20 bg-surface border-r border-white/5 flex flex-col items-center py-6 gap-4">
-      {/* Logo */}
-      <div className="w-10 h-10 mb-4 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+    <aside className="sidebar-shell w-16 md:w-20 border-r border-white/5 flex flex-col items-center py-6 gap-4">
+      <div className="brand-mark w-11 h-11 mb-4 rounded-2xl flex items-center justify-center text-lg font-black text-white shadow-[0_0_30px_rgba(124,58,237,0.45)]">
         H
       </div>
-      
+
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
@@ -30,10 +29,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
-            className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-xs transition-all focus:outline-none focus:ring-2 focus:ring-primary ${
+            className={`nav-button w-12 h-12 rounded-2xl flex flex-col items-center justify-center text-xs transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary ${
               isActive
-                ? 'bg-primary/10 text-primary border-l-2 border-primary shadow-inner'
-                : 'text-slate-400 hover:bg-card hover:text-slate-200 border-l-2 border-transparent'
+                ? 'nav-button-active text-primary shadow-[0_0_18px_rgba(124,58,237,0.25)]'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
             title={tab.label}
             aria-label={tab.label}

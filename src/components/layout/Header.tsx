@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="h-16 bg-surface border-b border-white/5 flex items-center justify-between px-6 z-10 relative">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
-          Handsfree
+          HandsFree
         </h1>
         <div className="hidden md:flex px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-xs text-primary font-medium">
           Control Center

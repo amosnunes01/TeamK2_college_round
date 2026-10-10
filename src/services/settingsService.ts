@@ -20,7 +20,9 @@ export function loadSettings(): HandsfreeSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      if (settings.trackingMode === 'combined') settings.trackingMode = 'hand';
+      return settings;
     }
   } catch (e) {
     console.warn('Failed to load settings from localStorage', e);
