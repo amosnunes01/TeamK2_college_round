@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@theme {
+:root {
   --color-background: #080b14;
   --color-surface: #101626;
   --color-surface-hover: #151e30;
@@ -9,6 +9,42 @@
   --color-primary: #8b5cf6;
   --color-primary-hover: #7c3aed;
   --color-secondary: #22d3ee;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-soft: rgba(148, 163, 184, 0.18);
+  --shadow-soft: rgba(15, 23, 42, 0.35);
+  --input-bg: rgba(15, 23, 42, 0.72);
+  --overlay: rgba(8, 11, 20, 0.78);
+}
+
+:root[data-theme='light'] {
+  --color-background: #f3f6fb;
+  --color-surface: #ffffff;
+  --color-surface-hover: #edf2f7;
+  --color-card: #ffffff;
+  --color-card-hover: #edf2f7;
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-secondary: #0ea5e9;
+  --text-primary: #111827;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --border-soft: rgba(148, 163, 184, 0.4);
+  --shadow-soft: rgba(15, 23, 42, 0.12);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --overlay: rgba(248, 250, 252, 0.82);
+}
+
+@theme {
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-card: var(--color-card);
+  --color-card-hover: var(--color-card-hover);
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-secondary: var(--color-secondary);
   
   --animate-fade-in: fadeIn 0.3s ease-out;
   --animate-slide-up: slideUp 0.4s ease-out;
@@ -38,10 +74,11 @@
 body {
   margin: 0;
   background: var(--color-background);
-  color: rgb(226 232 240);
+  color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root {
@@ -49,6 +86,76 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+:root[data-theme='light'] body,
+:root[data-theme='light'] #root {
+  background: var(--color-background);
+  color: var(--text-primary);
+}
+
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+    box-shadow 0.2s ease, fill 0.2s ease, stroke 0.2s ease;
+}
+
+:root[data-theme='light'] .text-white,
+:root[data-theme='light'] .text-slate-100,
+:root[data-theme='light'] .text-slate-200,
+:root[data-theme='light'] .text-slate-300,
+:root[data-theme='light'] .text-slate-400,
+:root[data-theme='light'] .text-slate-500,
+:root[data-theme='light'] .text-slate-600,
+:root[data-theme='light'] .text-slate-700,
+:root[data-theme='light'] .text-slate-800,
+:root[data-theme='light'] .text-slate-900 {
+  color: var(--text-secondary) !important;
+}
+
+:root[data-theme='light'] .text-white {
+  color: var(--text-primary) !important;
+}
+
+:root[data-theme='light'] [class*='bg-slate-700'],
+:root[data-theme='light'] [class*='bg-slate-800'],
+:root[data-theme='light'] [class*='bg-slate-900'],
+:root[data-theme='light'] [class*='hover:bg-slate-700'],
+:root[data-theme='light'] [class*='hover:bg-slate-800'],
+:root[data-theme='light'] [class*='hover:bg-slate-900'] {
+  background-color: var(--color-surface-hover) !important;
+}
+
+:root[data-theme='light'] [class*='border-white/5'],
+:root[data-theme='light'] [class*='border-white/10'],
+:root[data-theme='light'] [class*='border-white/20'],
+:root[data-theme='light'] [class*='border-slate-700'],
+:root[data-theme='light'] [class*='border-slate-800'] {
+  border-color: var(--border-soft) !important;
+}
+
+:root[data-theme='light'] [class*='bg-card'] {
+  background-color: var(--color-card) !important;
+}
+
+:root[data-theme='light'] [class*='bg-surface'] {
+  background-color: var(--color-surface) !important;
+}
+
+:root[data-theme='light'] [class*='bg-background'] {
+  background-color: var(--color-background) !important;
+}
+
+:root[data-theme='light'] [class*='placeholder-slate-500']::placeholder {
+  color: var(--text-muted) !important;
+}
+
+:root[data-theme='light'] input,
+:root[data-theme='light'] textarea,
+:root[data-theme='light'] select {
+  background-color: var(--input-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-soft) !important;
+}
+
 
 /* Focus styles for accessibility */
 *:focus-visible {

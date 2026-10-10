@@ -1,17 +1,21 @@
 import React from 'react';
-import { Camera, Mic, Activity } from 'lucide-react';
+import { Camera, Mic, Activity, SunMedium, MoonStar } from 'lucide-react';
 import type { PermissionStatus, TrackingHealth } from '../../types';
 
 interface HeaderProps {
   isTracking: boolean;
   permissionStatus: PermissionStatus;
   trackingHealth: TrackingHealth;
+  theme: 'dark' | 'light';
+  onThemeToggle: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   isTracking,
   permissionStatus,
   trackingHealth,
+  theme,
+  onThemeToggle,
 }) => {
   return (
     <header className="h-16 bg-surface border-b border-white/5 flex items-center justify-between px-6 z-10 relative">
@@ -24,7 +28,17 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
       
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4 md:gap-6">
+        <button
+          type="button"
+          onClick={onThemeToggle}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-card px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          {theme === 'dark' ? <SunMedium size={14} /> : <MoonStar size={14} />}
+          <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+        </button>
+
         <div className="flex items-center gap-2">
           <Camera size={16} className="text-slate-400" />
           <div className={`w-2 h-2 rounded-full ${permissionStatus.camera === 'granted' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : permissionStatus.camera === 'denied' ? 'bg-red-500' : 'bg-slate-500'}`} />

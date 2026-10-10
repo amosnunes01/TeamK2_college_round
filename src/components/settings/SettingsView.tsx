@@ -5,11 +5,15 @@ import type { HandsfreeSettings, TrackingMode } from '../../types';
 interface SettingsViewProps {
   settings: HandsfreeSettings;
   onSettingsChange: (settings: HandsfreeSettings) => void;
+  theme: 'dark' | 'light';
+  onThemeToggle: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   onSettingsChange,
+  theme,
+  onThemeToggle,
 }) => {
   const update = (partial: Partial<HandsfreeSettings>) => {
     onSettingsChange({ ...settings, ...partial });
@@ -22,6 +26,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <h2 className="text-3xl font-bold text-white mb-2">Settings</h2>
           <p className="text-slate-400">Manage your interaction preferences and input modes.</p>
         </div>
+
+        {/* Theme */}
+        <Section title="Appearance" icon={<Monitor className="w-5 h-5 text-violet-400" />}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-white font-medium">Theme</p>
+              <p className="text-slate-400 text-sm mt-1">Dark mode stays as the default. Light mode is available for daytime use.</p>
+            </div>
+            <button
+              type="button"
+              onClick={onThemeToggle}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-surface px-3 py-2 text-sm font-medium text-primary transition-colors hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {theme === 'dark' ? <Monitor className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
+          </div>
+        </Section>
 
         {/* Tracking Mode */}
         <Section title="Tracking Mode" icon={<Activity className="w-5 h-5 text-violet-400" />}>

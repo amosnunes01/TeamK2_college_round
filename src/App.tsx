@@ -30,10 +30,22 @@ import { getWsClient } from './services/handsfreeWsClient';
 
 import { useIntentGuard } from './hooks/useIntentGuard';
 
+type ThemeMode = 'dark' | 'light';
+
+const THEME_STORAGE_KEY = 'handsfree-theme';
+
+const getInitialTheme = (): ThemeMode => {
+  if (typeof window === 'undefined') return 'dark';
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'dark' || stored === 'light') return stored;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+};
+
 export const App: React.FC = () => {
   // ---- State ----
   const [activeTab, setActiveTab] = useState<SidebarTab>('dashboard');
   const [settings, setSettings] = useState<HandsfreeSettings>(() => loadSettings());
+  const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
   const [isTracking, setIsTracking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [interactionState, setInteractionState] = useState<InteractionState>('idle');
@@ -143,6 +155,21 @@ export const App: React.FC = () => {
       return merged;
     });
   }, []);
+
+  const handleThemeToggle = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', theme);
+    root.style.colorScheme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   // Shared tracking callback for both hand and head modes
   const makeTrackingCallback = useCallback(
@@ -601,6 +628,8 @@ export const App: React.FC = () => {
           <SettingsView
             settings={settings}
             onSettingsChange={handleSettingsChange}
+            theme={theme}
+            onThemeToggle={handleThemeToggle}
           />
         );
       default:
@@ -644,6 +673,8 @@ export const App: React.FC = () => {
         isTracking={isTracking}
         permissionStatus={permissionStatus}
         trackingHealth={trackingHealth}
+        theme={theme}
+        onThemeToggle={handleThemeToggle}
       />
 
       {/* Main Area */}
