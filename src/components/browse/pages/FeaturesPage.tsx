@@ -1,5 +1,8 @@
-import React from 'react';
-import { Hand, Smile, Mic, Keyboard, Shield, Crosshair, Activity, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Hand, Mic, Shield, MousePointer, Zap, Target, Eye, Volume2,
+  CheckCircle, XCircle, ChevronDown, ChevronUp
+} from 'lucide-react';
 
 interface FeaturesPageProps {
   onAction: (msg: string) => void;
@@ -7,97 +10,149 @@ interface FeaturesPageProps {
 
 const features = [
   {
-    icon: <Hand className="w-8 h-8" />,
-    title: 'Hand Tracking',
-    description: 'Real-time hand landmark detection using MediaPipe Tasks Vision. Map index finger tip position to cursor coordinates with configurable sensitivity and smoothing.',
-    status: 'Phase 2',
+    icon: <Hand size={22} />, color: 'text-purple-400', title: 'Hand Tracking',
+    summary: 'MediaPipe HandLandmarker tracks 21 keypoints in real time.',
+    details: 'Runs entirely on-device using WebAssembly. Detects the index fingertip to control the pointer. A peace/victory gesture (two raised fingers) enters scroll mode. Tracking confidence is continuously monitored — frames below 55% confidence are discarded to prevent jitter.',
   },
   {
-    icon: <Smile className="w-8 h-8" />,
-    title: 'Head Tracking',
-    description: 'Face landmark detection for cursor control through head movement. Experimental mode with nose-tip mapping and dead-zone filtering.',
-    status: 'Phase 3',
+    icon: <Eye size={22} />, color: 'text-blue-400', title: 'Head Tracking',
+    summary: 'FaceLandmarker provides head-pose cursor control.',
+    details: 'Uses facial landmark geometry to estimate head orientation. Tilting your head left/right/up/down moves the cursor proportionally. Useful for users with limited hand mobility. Uses the same smoothing and dead-zone pipeline as hand tracking.',
   },
   {
-    icon: <Mic className="w-8 h-8" />,
-    title: 'Voice Navigation',
-    description: 'Web Speech API integration for hands-free commands: scroll, click, navigate, open pages, and more. Supports command mode and dictation mode.',
-    status: 'Phase 4',
+    icon: <Mic size={22} />, color: 'text-emerald-400', title: 'Voice Commands',
+    summary: 'Web Speech API drives navigation and actions.',
+    details: 'Recognized commands: "go back", "go forward", "go home", "reload", "scroll up", "scroll down", "click", "select", "pause control", "resume control", "stop session", "start dictation". Commands are deduplicated within a 600 ms window to prevent double-firing.',
   },
   {
-    icon: <Keyboard className="w-8 h-8" />,
-    title: 'Voice Typing',
-    description: 'Dictate text into search fields, forms, and text areas. Separate dictation mode with punctuation support.',
-    status: 'Phase 4',
+    icon: <MousePointer size={22} />, color: 'text-amber-400', title: 'Dwell Click',
+    summary: 'Hover over an element for a configurable time to activate it.',
+    details: 'Default dwell time is 800 ms, configurable in Settings. A progress arc fills around the pointer as the dwell timer progresses. Scrolling gestures immediately cancel any active dwell. IntentGuard enforces a post-activation cooldown (default 800 ms) to prevent double-clicks.',
   },
   {
-    icon: <Shield className="w-8 h-8" />,
-    title: 'IntentGuard',
-    description: 'Deterministic interaction-safety system. Dwell-to-select with progress indicator, confirmation for sensitive actions, cooldown between activations.',
-    status: 'Phase 5',
+    icon: <Shield size={22} />, color: 'text-rose-400', title: 'IntentGuard',
+    summary: 'State machine that prevents accidental activations.',
+    details: 'States: idle → tracking → targeted → (optional pendingConfirmation) → executing. Sensitive actions (delete, submit) can require explicit confirmation. Tracking loss or pause immediately cancels pending actions. Low-confidence frames keep the state in "tracking" without targeting.',
   },
   {
-    icon: <Crosshair className="w-8 h-8" />,
-    title: 'Quick Calibration',
-    description: 'Guided calibration workflow designed to complete within 30 seconds. Target-based mapping with retry and recalibration support.',
-    status: 'Phase 3',
+    icon: <Target size={22} />, color: 'text-cyan-400', title: 'Calibration',
+    summary: 'Optional 9-point calibration for precise mapping.',
+    details: 'The calibration overlay captures 9 screen-space reference points. A bilinear correction matrix maps raw tracker coordinates to screen pixels, compensating for camera angle and user positioning. Calibration data persists in localStorage.',
   },
   {
-    icon: <Activity className="w-8 h-8" />,
-    title: 'Performance Evaluation',
-    description: 'Built-in evaluation mode with repeatable tasks. Measures completion time, accuracy, errors, and accidental activations.',
-    status: 'Phase 6',
+    icon: <Zap size={22} />, color: 'text-yellow-400', title: 'Performance',
+    summary: 'GPU-accelerated, rAF-synchronized rendering.',
+    details: 'The pointer cursor uses CSS translate3d (GPU layer) and will-change: transform. React state updates for tracking health are throttled to 2 Hz. Hand-scroll velocity is accumulated in a ref and drained through requestAnimationFrame with exponential decay for smooth momentum.',
   },
   {
-    icon: <RefreshCw className="w-8 h-8" />,
-    title: 'Adaptive Tracking',
-    description: 'Dynamic adjustment for jitter, confidence drops, position changes, and lighting conditions. Automatic tracking suspension when unreliable.',
-    status: 'Phase 2-3',
+    icon: <Volume2 size={22} />, color: 'text-indigo-400', title: 'Voice Dictation',
+    summary: 'Speak to fill form fields and search boxes.',
+    details: 'Say "start dictation" to enter dictation mode. All subsequent speech is appended to the focused input as text. Say "stop dictation" to return to command mode. No server round-trip — the Web Speech API is entirely browser-native.',
   },
 ];
 
-export const FeaturesPage: React.FC<FeaturesPageProps> = ({ onAction }) => {
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-white">Features</h1>
-      <p className="text-slate-400">
-        A comprehensive list of Handsfree capabilities, organized by
-        implementation phase.
-      </p>
+const compatibility = [
+  { item: 'Chrome 113+', supported: true },
+  { item: 'Edge 113+', supported: true },
+  { item: 'Firefox', supported: false, note: 'No Web Speech API' },
+  { item: 'Safari', supported: false, note: 'Limited Speech API' },
+  { item: 'Mobile Chrome (Android)', supported: true, note: 'Camera required' },
+  { item: 'iOS Safari', supported: false, note: 'WebAssembly limitations' },
+];
 
-      <div className="space-y-4">
-        {features.map((feature, i) => (
-          <div
-            key={i}
-            className="bg-card border border-white/5 rounded-xl p-5 hover:border-primary/30 transition-colors"
-            data-handsfree-target={`feature-detail-${i}`}
-          >
-            <div className="flex items-start gap-4">
-              <span className="text-primary">{feature.icon}</span>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold text-lg">
-                    {feature.title}
-                  </h3>
-                  <span className="px-2 py-0.5 bg-slate-700 text-slate-300 rounded-full text-xs font-medium">
-                    {feature.status}
-                  </span>
-                </div>
-                <p className="text-slate-400 text-sm mt-2">
-                  {feature.description}
-                </p>
-                <button
-                  onClick={() => onAction(`Viewing details for: ${feature.title}`)}
-                  className="mt-3 text-primary hover:text-primary/80 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary rounded"
-                  data-handsfree-target={`feature-btn-${i}`}
-                  data-handsfree-label={`View ${feature.title}`}
-                >
-                  View Details →
-                </button>
+export const FeaturesPage: React.FC<FeaturesPageProps> = ({ onAction }) => {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-10">
+      <div className="border-b border-white/5 pb-6">
+        <h1 className="text-3xl font-bold text-white mb-2">Features</h1>
+        <p className="text-slate-400 text-sm">
+          Complete capability overview. Click any feature card to expand details.
+          Use hand gestures, dwell-click, or say <span className="text-primary font-medium">"click"</span> to interact.
+        </p>
+      </div>
+
+      {/* Feature Accordion */}
+      <div className="space-y-3">
+        {features.map((f, i) => (
+          <div key={i} className="bg-card border border-white/5 rounded-xl overflow-hidden transition-all hover:border-primary/20">
+            <button
+              className="w-full flex items-center gap-3 px-5 py-4 text-left"
+              onClick={() => { setExpanded(expanded === i ? null : i); onAction(`Expanded: ${f.title}`); }}
+              data-handsfree-target={`feature-${i}`}
+              data-handsfree-label={f.title}
+            >
+              <span className={`shrink-0 ${f.color}`}>{f.icon}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-white font-semibold">{f.title}</div>
+                <div className="text-slate-400 text-sm mt-0.5">{f.summary}</div>
               </div>
-            </div>
+              <span className="text-slate-500 shrink-0">
+                {expanded === i ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </span>
+            </button>
+            {expanded === i && (
+              <div className="px-5 pb-5 pt-1 border-t border-white/5">
+                <p className="text-slate-300 text-sm leading-relaxed">{f.details}</p>
+              </div>
+            )}
           </div>
         ))}
+      </div>
+
+      {/* Browser Compatibility */}
+      <div>
+        <h2 className="text-xl font-semibold text-white mb-4">Browser Compatibility</h2>
+        <div className="bg-card border border-white/5 rounded-xl overflow-hidden">
+          {compatibility.map((c, i) => (
+            <div key={i} className={`flex items-center gap-3 px-5 py-3 ${i > 0 ? 'border-t border-white/5' : ''}`}>
+              {c.supported
+                ? <CheckCircle size={16} className="text-green-400 shrink-0" />
+                : <XCircle size={16} className="text-red-400 shrink-0" />}
+              <span className="text-white text-sm font-medium flex-1">{c.item}</span>
+              {c.note && <span className="text-slate-500 text-xs">{c.note}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Voice Command Reference */}
+      <div>
+        <h2 className="text-xl font-semibold text-white mb-4">Voice Command Reference</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            ['go back', 'Navigate back in browse history'],
+            ['go forward', 'Navigate forward in browse history'],
+            ['go home', 'Go to browse Home page'],
+            ['reload', 'Reload the current page'],
+            ['scroll up', 'Scroll the page upward'],
+            ['scroll down', 'Scroll the page downward'],
+            ['click / select', 'Activate the current target'],
+            ['pause control', 'Freeze pointer and gestures'],
+            ['resume control', 'Restore tracking'],
+            ['stop session', 'Stop tracking and release camera/mic'],
+            ['start dictation', 'Enter voice typing mode'],
+            ['stop dictation', 'Exit voice typing mode'],
+          ].map(([cmd, desc], i) => (
+            <div key={i} className="bg-card border border-white/5 rounded-xl px-4 py-3 flex items-start gap-3">
+              <code className="text-primary text-xs bg-primary/10 rounded px-1.5 py-0.5 shrink-0 mt-0.5">"{cmd}"</code>
+              <span className="text-slate-300 text-sm">{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Demo button */}
+      <div className="flex gap-3 pb-4">
+        <button
+          onClick={() => onAction('Try It Now clicked!')}
+          className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-primary shadow-[0_0_15px_rgba(139,92,246,0.25)]"
+          data-handsfree-target="try-it"
+          data-handsfree-label="Try It Now"
+        >
+          Try It Now
+        </button>
       </div>
     </div>
   );

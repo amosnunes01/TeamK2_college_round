@@ -19,9 +19,10 @@ export const PointerOverlay: React.FC<PointerOverlayProps> = ({ position, isTrac
     <div
       className="handsfree-pointer pointer-events-none fixed z-[9999] flex items-center justify-center mix-blend-difference"
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        transform: 'translate(-50%, -50%)',
+        left: 0,
+        top: 0,
+        transform: `translate3d(${position.x}px, ${position.y}px, 0) translate(-50%, -50%)`,
+        willChange: 'transform',
         transition: 'none', // Critical: CSS transitions cause lag for tracking cursors
       }}
     >

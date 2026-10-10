@@ -158,8 +158,56 @@ class TrackingService {
 
   private lastVideoTime = -1;
 
+  private videoFrameCallbackId: number | null = null;
+  private isPaused: boolean = false;
+  private freshFramesRequired: number = 0;
+
+  private scheduleNextFrame = () => {
+    if (!this.isTracking || this.isPaused || !this.videoElement) return;
+
+    if ('requestVideoFrameCallback' in this.videoElement) {
+      this.videoFrameCallbackId = (this.videoElement as any).requestVideoFrameCallback(this.detect);
+    } else {
+      this.animationFrameId = requestAnimationFrame(this.detect);
+    }
+  };
+
+  pause() {
+    this.isPaused = true;
+
+    if (this.videoFrameCallbackId !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
+      (this.videoElement as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+      this.videoFrameCallbackId = null;
+    }
+
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    if (this.debugCtx && this.debugCanvas) {
+      this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+    }
+
+    this.resetSmoothing();
+  }
+
+  resume() {
+    if (!this.isTracking || !this.videoElement) return;
+    this.isPaused = false;
+    this.resetSmoothing();
+    this.lastVideoTime = -1;
+    this.freshFramesRequired = 2; // Require 2 clean frames before dispatching pointer
+    this.scheduleNextFrame();
+  }
+
+  resetSmoothing() {
+    this.lastX = 0;
+    this.lastY = 0;
+  }
+
   private detect = () => {
-    if (!this.isTracking || !this.videoElement || !this.handLandmarker) return;
+    if (!this.isTracking || this.isPaused || !this.videoElement || !this.handLandmarker) return;
 
     const startTimeMs = performance.now();
 
@@ -171,7 +219,20 @@ class TrackingService {
         if (results.landmarks && results.landmarks.length > 0) {
           const lms = results.landmarks[0];
           const indexFingerTip = lms[8];
-          const confidence = results.handednesses[0][0].score;
+          const confidence = results.handednesses?.[0]?.[0]?.score ?? 0.8;
+
+          // Gate low confidence frames (< 0.55) or frames during post-resume warmup
+          if (confidence < 0.55) {
+            this.scheduleNextFrame();
+            return;
+          }
+
+          if (this.freshFramesRequired > 0) {
+            this.freshFramesRequired--;
+            this.drawLandmarks(lms);
+            this.scheduleNextFrame();
+            return;
+          }
 
           // Simple gesture detection for scrolling (index and middle fingers up, ring and pinky down)
           // Y is 0 at top, 1 at bottom, so "up" means tip.y < pip.y
@@ -194,28 +255,35 @@ class TrackingService {
               y: indexFingerTip.y,
               confidence,
               landmarks: lms,
-              gesture
+              gesture,
             });
           }
         } else {
-        if (this.debugCtx && this.debugCanvas) {
-          this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+          if (this.debugCtx && this.debugCanvas) {
+            this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+          }
+          if (this.callback) this.callback(null);
         }
-        if (this.callback) this.callback(null);
-      }
-      } catch (e) {
+      } catch {
         // Ignore MediaPipe monotonic timestamp errors
       }
     }
 
-    // Use setTimeout instead of requestAnimationFrame so it doesn't completely freeze when the tab is backgrounded
-    this.animationFrameId = setTimeout(this.detect, 33) as unknown as number;
+    this.scheduleNextFrame();
   };
 
   stop() {
     this.isTracking = false;
+    this.isPaused = false;
+    this.freshFramesRequired = 0;
+
+    if (this.videoFrameCallbackId !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
+      (this.videoElement as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+      this.videoFrameCallbackId = null;
+    }
+
     if (this.animationFrameId !== null) {
-      clearTimeout(this.animationFrameId);
+      cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
 
@@ -223,6 +291,9 @@ class TrackingService {
       this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
     }
 
+    this.lastX = 0;
+    this.lastY = 0;
+    this.lastVideoTime = -1;
     this.videoElement = null;
     this.callback = null;
   }
@@ -230,6 +301,7 @@ class TrackingService {
   /**
    * Map raw tracked coordinates to screen pixels.
    * Uses calibration data if available, otherwise falls back to default range mapping.
+   * Incorporates deadZone and adaptive velocity-based smoothing.
    */
   applySmoothing(
     rawX: number,
@@ -237,7 +309,8 @@ class TrackingService {
     viewportWidth: number,
     viewportHeight: number,
     smoothingFactor: number,
-    sensitivity: number = 5
+    sensitivity: number = 5,
+    deadZone: number = 5
   ): { x: number; y: number } {
     let effectiveX: number;
     let effectiveY: number;
@@ -265,10 +338,31 @@ class TrackingService {
     const targetX = (1 - effectiveX) * viewportWidth;
     const targetY = effectiveY * viewportHeight;
 
-    const alpha = Math.max(0.05, 0.5 - (smoothingFactor - 1) * 0.05);
+    // First sample initialization
+    if (this.lastX === 0 && this.lastY === 0) {
+      this.lastX = targetX;
+      this.lastY = targetY;
+      return { x: this.lastX, y: this.lastY };
+    }
 
-    this.lastX = this.lastX + alpha * (targetX - this.lastX);
-    this.lastY = this.lastY + alpha * (targetY - this.lastY);
+    const dx = targetX - this.lastX;
+    const dy = targetY - this.lastY;
+    const distance = Math.hypot(dx, dy);
+
+    // Dead zone: ignore micro-tremors below the threshold
+    if (distance < deadZone) {
+      return { x: this.lastX, y: this.lastY };
+    }
+
+    // Velocity-adaptive smoothing:
+    // When moving quickly, increase alpha to eliminate lag.
+    // When dwelling/slow, use base smoothing for rock-solid stability.
+    const baseAlpha = Math.max(0.08, 0.45 - (smoothingFactor - 1) * 0.04);
+    const speedFactor = Math.min(1.0, (distance - deadZone) / 80);
+    const alpha = Math.min(0.85, baseAlpha + speedFactor * 0.4);
+
+    this.lastX = this.lastX + alpha * dx;
+    this.lastY = this.lastY + alpha * dy;
 
     this.lastX = Math.max(0, Math.min(viewportWidth, this.lastX));
     this.lastY = Math.max(0, Math.min(viewportHeight, this.lastY));

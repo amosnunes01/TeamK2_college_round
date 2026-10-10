@@ -39,9 +39,15 @@ export const App: React.FC = () => {
   const [interactionState, setInteractionState] = useState<InteractionState>('idle');
   const [commandHistory, _setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   void _setCommandHistory;
+  const [lastVoiceCommand, setLastVoiceCommand] = useState<string | null>(null);
 
   const [pointerPosition, setPointerPosition] = useState<PointerPosition | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+
+  // Broadcast click to WebSocket bridge only (no extension window.postMessage)
+  const broadcastClick = useCallback(() => {
+    getWsClient()?.send({ type: 'HANDSFREE_CLICK' });
+  }, []);
 
   // IntentGuard
   const intentGuard = useIntentGuard({
@@ -49,11 +55,23 @@ export const App: React.FC = () => {
     settings,
     interactionState,
     setInteractionState,
-    isTracking
+    isTracking,
+    onActionExecute: () => {
+      broadcastClick();
+    }
   });
+  const intentGuardRef = useRef(intentGuard);
+  useEffect(() => {
+    intentGuardRef.current = intentGuard;
+  }, [intentGuard]);
 
   // Calibration
   const [showCalibration, setShowCalibration] = useState(false);
+  const showCalibrationRef = useRef(false);
+  useEffect(() => {
+    showCalibrationRef.current = showCalibration;
+  }, [showCalibration]);
+
   const [calibrationResult, setCalibrationResult] = useState<CalibrationResult | null>(
     () => loadCalibration()
   );
@@ -78,10 +96,37 @@ export const App: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fpsRef = useRef<{ frames: number; lastTime: number }>({
     frames: 0,
-    lastTime: performance.now(),
+    lastTime: 0,
   });
+  const lastHealthUpdateRef = useRef<number>(0);
   const lastScrollY = useRef<number | null>(null);
-  const lastReactUpdate = useRef<number>(0);
+  const pendingScrollDeltaYRef = useRef<number>(0);
+  const scrollRafIdRef = useRef<number | null>(null);
+  const isPausedRef = useRef<boolean>(false);
+
+  // Smooth scroll animator using requestAnimationFrame
+  const startScrollDrain = useCallback(() => {
+    if (scrollRafIdRef.current !== null) return;
+
+    const drain = () => {
+      if (Math.abs(pendingScrollDeltaYRef.current) > 0.5) {
+        const step = pendingScrollDeltaYRef.current * 0.35;
+        pendingScrollDeltaYRef.current -= step;
+
+        // Target the browse viewport if mounted, otherwise fall back to window
+        const browseViewport = document.getElementById('browse-viewport') as HTMLElement | null;
+        const target: Element | Window = browseViewport ?? window;
+        target.scrollBy({ top: step, behavior: 'auto' });
+
+        scrollRafIdRef.current = requestAnimationFrame(drain);
+      } else {
+        pendingScrollDeltaYRef.current = 0;
+        scrollRafIdRef.current = null;
+      }
+    };
+
+    scrollRafIdRef.current = requestAnimationFrame(drain);
+  }, []);
 
   // Apply loaded calibration to tracking service on mount
   useEffect(() => {
@@ -103,19 +148,25 @@ export const App: React.FC = () => {
   const makeTrackingCallback = useCallback(
     (mode: 'hand' | 'head') => {
       return (coords: import('./services/trackingService').TrackingCoordinates | null) => {
+        if (isPausedRef.current) return;
+
         const now = performance.now();
         fpsRef.current.frames++;
-        let fps = 0;
-        if (now - fpsRef.current.lastTime >= 1000) {
-          fps = fpsRef.current.frames;
+        let currentFps = 0;
+        if (fpsRef.current.lastTime === 0) {
+          fpsRef.current.lastTime = now;
+        } else if (now - fpsRef.current.lastTime >= 1000) {
+          currentFps = fpsRef.current.frames;
           fpsRef.current.frames = 0;
           fpsRef.current.lastTime = now;
         }
 
         if (coords) {
-          // Store raw for calibration
+          // Store raw for calibration only when overlay is visible
           rawTrackedRef.current = { x: coords.x, y: coords.y };
-          setRawTrackedForCalibration({ x: coords.x, y: coords.y });
+          if (showCalibrationRef.current) {
+            setRawTrackedForCalibration({ x: coords.x, y: coords.y });
+          }
 
           const service = mode === 'head' ? headTrackingService : trackingService;
           const mapped = service.applySmoothing(
@@ -124,7 +175,8 @@ export const App: React.FC = () => {
             window.innerWidth,
             window.innerHeight,
             settings.smoothing,
-            settings.sensitivity
+            settings.sensitivity,
+            settings.deadZone
           );
 
           setPointerPosition({
@@ -135,14 +187,13 @@ export const App: React.FC = () => {
             gesture: coords.gesture
           });
 
-          // Hand scrolling logic
+          // Hand scrolling logic: coalesced via requestAnimationFrame
           if (coords.gesture === 'scroll') {
             if (lastScrollY.current !== null) {
               const deltaY = mapped.y - lastScrollY.current;
               if (Math.abs(deltaY) > settings.scrollDeadZone) {
-                const scrollContainer = document.querySelector('main > div, .overflow-y-auto');
-                const target = scrollContainer || window;
-                target.scrollBy({ top: deltaY * (settings.scrollSensitivity * 0.5) });
+                pendingScrollDeltaYRef.current += deltaY * (settings.scrollSensitivity * 0.4);
+                startScrollDrain();
                 lastScrollY.current = mapped.y;
               }
             } else {
@@ -150,31 +201,54 @@ export const App: React.FC = () => {
             }
           } else {
             lastScrollY.current = mapped.y;
+            pendingScrollDeltaYRef.current = 0;
           }
 
-          // Broadcast to extension via WebSocket Bridge
+          // Send to WebSocket bridge (for evaluation/testing) — no extension postMessage
           getWsClient()?.send({
             type: 'HANDSFREE_BROADCAST',
             payload: {
               x: mapped.x,
               y: mapped.y,
+              normX: mapped.x / window.innerWidth,
+              normY: mapped.y / window.innerHeight,
               gesture: coords.gesture,
-              isTracking: true
+              isTracking: true,
             }
           });
 
-          setTrackingHealth({
-            isTracking: true,
-            confidence: coords.confidence,
-            fps: fps || undefined as any, // keep previous fps between second ticks
-            landmarksDetected: true,
-            lastUpdate: now,
-            message: mode === 'head' ? 'Head tracking active' : 'Hand tracking active',
-          });
+          // Throttle tracking health updates to avoid excessive React tree re-renders
+          if (now - lastHealthUpdateRef.current >= 500) {
+            lastHealthUpdateRef.current = now;
+            setTrackingHealth({
+              isTracking: true,
+              confidence: coords.confidence,
+              fps: currentFps || 30,
+              landmarksDetected: true,
+              lastUpdate: now,
+              message: mode === 'head' ? 'Head tracking active' : 'Hand tracking active',
+            });
+          }
         } else {
+          // Tracking lost: suspend scroll immediately, cancel pending drain, and hide pointer
+          lastScrollY.current = null;
+          pendingScrollDeltaYRef.current = 0;
+          if (scrollRafIdRef.current !== null) {
+            cancelAnimationFrame(scrollRafIdRef.current);
+            scrollRafIdRef.current = null;
+          }
+
           rawTrackedRef.current = null;
-          setRawTrackedForCalibration(null);
+          if (showCalibrationRef.current) {
+            setRawTrackedForCalibration(null);
+          }
           setPointerPosition(null);
+
+          getWsClient()?.send({
+            type: 'HANDSFREE_BROADCAST',
+            payload: { x: 0, y: 0, normX: 0, normY: 0, isTracking: false }
+          });
+
           setTrackingHealth((prev) => ({
             ...prev,
             isTracking: true,
@@ -186,12 +260,13 @@ export const App: React.FC = () => {
         }
       };
     },
-    [settings.smoothing, settings.sensitivity]
+    [settings.smoothing, settings.sensitivity, settings.deadZone, settings.scrollSensitivity, settings.scrollDeadZone, startScrollDrain]
   );
 
   const handleStart = useCallback(async () => {
     if (!videoRef.current) return;
 
+    isPausedRef.current = false;
     setInteractionState('tracking');
     setIsTracking(true);
     setTrackingHealth((prev) => ({
@@ -251,20 +326,56 @@ export const App: React.FC = () => {
 
   const handlePause = useCallback(() => {
     setInteractionState('paused');
-  }, []);
+    isPausedRef.current = true;
+
+    // Pause active tracking service
+    const service = settings.trackingMode === 'head' ? headTrackingService : trackingService;
+    service.pause();
+
+    lastScrollY.current = null;
+    pendingScrollDeltaYRef.current = 0;
+    if (scrollRafIdRef.current !== null) {
+      cancelAnimationFrame(scrollRafIdRef.current);
+      scrollRafIdRef.current = null;
+    }
+
+    setPointerPosition(null);
+    getWsClient()?.send({ type: 'HANDSFREE_BROADCAST', payload: { x: 0, y: 0, normX: 0, normY: 0, isTracking: false } });
+  }, [settings.trackingMode]);
 
   const handleResume = useCallback(() => {
+    isPausedRef.current = false;
     setInteractionState('tracking');
-  }, []);
+
+    lastScrollY.current = null;
+    pendingScrollDeltaYRef.current = 0;
+
+    // Resume active tracking service with fresh frame calibration
+    const service = settings.trackingMode === 'head' ? headTrackingService : trackingService;
+    service.resume();
+  }, [settings.trackingMode]);
 
   const handleStop = useCallback(() => {
+    isPausedRef.current = false;
     trackingService.stop();
     headTrackingService.stop();
+    voiceService.stop();
+    setIsListening(false);
 
-    // Release camera
+    // Release camera tracks cleanly
     if (mediaStream) {
       mediaStream.getTracks().forEach((t) => t.stop());
     }
+
+    // Cancel scroll animations
+    lastScrollY.current = null;
+    pendingScrollDeltaYRef.current = 0;
+    if (scrollRafIdRef.current !== null) {
+      cancelAnimationFrame(scrollRafIdRef.current);
+      scrollRafIdRef.current = null;
+    }
+
+    getWsClient()?.send({ type: 'HANDSFREE_STOP' });
 
     setIsTracking(false);
     setInteractionState('idle');
@@ -278,7 +389,7 @@ export const App: React.FC = () => {
       fps: 0,
       landmarksDetected: false,
       lastUpdate: 0,
-      message: 'Tracking stopped',
+      message: 'Session stopped',
     });
   }, [mediaStream]);
 
@@ -311,14 +422,19 @@ export const App: React.FC = () => {
     voiceService.setCallbacks(
       (command) => {
         let executed = false;
-        
+
+        // Track last voice command for BrowseWorkspace status strip
+        if (command.type !== 'unknown') {
+          setLastVoiceCommand(command.parsed);
+        }
+
         // Execute command logic
         if (command.type === 'control') {
           if (command.parsed === 'pause control') {
-            setInteractionState('paused');
+            handlePause();
             executed = true;
           } else if (command.parsed === 'resume control') {
-            setInteractionState('tracking');
+            handleResume();
             executed = true;
           } else if (command.parsed === 'start dictation') {
             executed = true;
@@ -332,40 +448,54 @@ export const App: React.FC = () => {
             executed = true;
           }
         } else if (command.type === 'navigation') {
-          // Find the main scrollable container (either Dashboard or Browse Workspace)
-          const scrollContainer = document.querySelector('main > div, .overflow-y-auto');
-          const target = scrollContainer || window;
-
+          // Scroll — dispatch to browse viewport if on browse tab, else use window
           if (command.parsed === 'scroll down') {
-            target.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
+            if (activeTab === 'browse') {
+              window.dispatchEvent(new CustomEvent('handsfree:scroll', { detail: { direction: 'down' } }));
+            } else {
+              window.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
+            }
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'scroll down' });
             executed = true;
           } else if (command.parsed === 'scroll up') {
-            target.scrollBy({ top: -window.innerHeight / 2, behavior: 'smooth' });
+            if (activeTab === 'browse') {
+              window.dispatchEvent(new CustomEvent('handsfree:scroll', { detail: { direction: 'up' } }));
+            } else {
+              window.scrollBy({ top: -window.innerHeight / 2, behavior: 'smooth' });
+            }
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'scroll up' });
             executed = true;
           } else if (command.parsed === 'scroll to top') {
-            target.scrollTo({ top: 0, behavior: 'smooth' });
-            getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'scroll to top' });
+            const vp = document.getElementById('browse-viewport');
+            (vp ?? window).scrollTo({ top: 0, behavior: 'smooth' });
             executed = true;
           } else if (command.parsed === 'scroll to bottom') {
-            // For window, document.body.scrollHeight. For element, target.scrollHeight
-            const scrollHeight = target === window ? document.body.scrollHeight : (target as Element).scrollHeight;
-            target.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-            getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'scroll to bottom' });
+            const vp = document.getElementById('browse-viewport');
+            if (vp) {
+              vp.scrollTo({ top: vp.scrollHeight, behavior: 'smooth' });
+            } else {
+              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            }
             executed = true;
           } else if (command.parsed === 'go back') {
-            window.history.back();
+            // Dispatch to BrowseWorkspace internal history
+            window.dispatchEvent(new CustomEvent('handsfree:back'));
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'go back' });
             executed = true;
           } else if (command.parsed === 'go forward') {
-            window.history.forward();
+            window.dispatchEvent(new CustomEvent('handsfree:forward'));
             getWsClient()?.send({ type: 'HANDSFREE_VOICE_COMMAND', command: 'go forward' });
             executed = true;
           } else if (command.parsed === 'open home') {
-            // Support both global dashboard reset and workspace home
-            setActiveTab('dashboard');
+            // Switch to browse tab first, then navigate home within workspace
+            setActiveTab('browse');
             window.dispatchEvent(new CustomEvent('handsfree:home'));
+            executed = true;
+          } else if (command.parsed === 'reload') {
+            window.dispatchEvent(new CustomEvent('handsfree:reload'));
+            executed = true;
+          } else if (command.parsed === 'go to browse') {
+            setActiveTab('browse');
             executed = true;
           } else if (command.parsed === 'go to settings') {
             setActiveTab('settings');
@@ -374,12 +504,11 @@ export const App: React.FC = () => {
         } else if (command.type === 'action') {
           if (command.parsed === 'click' || command.parsed === 'select' || command.parsed === 'confirm' || command.parsed === 'cancel') {
             // Delegate to IntentGuard for safe activation
-            intentGuard.handleVoiceCommand(command);
+            intentGuardRef.current.handleVoiceCommand(command);
             executed = true;
-            
-            // Broadcast click to extension
+
             if (command.parsed === 'click' || command.parsed === 'select') {
-              getWsClient()?.send({ type: 'HANDSFREE_CLICK' });
+              broadcastClick();
             }
           } else if (command.parsed === 'clear text') {
             const el = document.activeElement;
@@ -393,9 +522,7 @@ export const App: React.FC = () => {
         } else if (command.type === 'dictation') {
           const el = document.activeElement;
           if (el && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
-            // Append text to input
             el.value = el.value ? el.value + ' ' + command.parsed : command.parsed;
-            // Dispatch input event for React
             el.dispatchEvent(new Event('input', { bubbles: true }));
             executed = true;
           }
@@ -403,7 +530,7 @@ export const App: React.FC = () => {
         }
 
         command.executed = executed;
-        
+
         // Don't clutter history with unrecognized ambient noise
         if (command.type !== 'unknown') {
           _setCommandHistory(prev => {
@@ -431,7 +558,7 @@ export const App: React.FC = () => {
         }
       }
     );
-  }, [pointerPosition, handleStart, handleStop]);
+  }, [handleStart, handleStop, handlePause, handleResume, broadcastClick, activeTab]);
 
   // Cleanup
   useEffect(() => {
@@ -466,7 +593,7 @@ export const App: React.FC = () => {
           />
         );
       case 'browse':
-        return <BrowseWorkspace />;
+        return <BrowseWorkspace isListening={isListening} lastVoiceCommand={lastVoiceCommand} />;
       case 'evaluation':
         return <EvaluationView />;
       case 'settings':

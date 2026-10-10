@@ -142,8 +142,56 @@ class HeadTrackingService {
 
   private lastVideoTime = -1;
 
+  private videoFrameCallbackId: number | null = null;
+  private isPaused: boolean = false;
+  private freshFramesRequired: number = 0;
+
+  private scheduleNextFrame = () => {
+    if (!this.isTracking || this.isPaused || !this.videoElement) return;
+
+    if ('requestVideoFrameCallback' in this.videoElement) {
+      this.videoFrameCallbackId = (this.videoElement as any).requestVideoFrameCallback(this.detect);
+    } else {
+      this.animationFrameId = requestAnimationFrame(this.detect);
+    }
+  };
+
+  pause() {
+    this.isPaused = true;
+
+    if (this.videoFrameCallbackId !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
+      (this.videoElement as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+      this.videoFrameCallbackId = null;
+    }
+
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    if (this.debugCtx && this.debugCanvas) {
+      this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+    }
+
+    this.resetSmoothing();
+  }
+
+  resume() {
+    if (!this.isTracking || !this.videoElement) return;
+    this.isPaused = false;
+    this.resetSmoothing();
+    this.lastVideoTime = -1;
+    this.freshFramesRequired = 2;
+    this.scheduleNextFrame();
+  }
+
+  resetSmoothing() {
+    this.lastX = 0;
+    this.lastY = 0;
+  }
+
   private detect = () => {
-    if (!this.isTracking || !this.videoElement || !this.faceLandmarker) return;
+    if (!this.isTracking || this.isPaused || !this.videoElement || !this.faceLandmarker) return;
 
     const startTimeMs = performance.now();
 
@@ -153,38 +201,54 @@ class HeadTrackingService {
         const results = this.faceLandmarker.detectForVideo(this.videoElement, startTimeMs);
 
         if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-        const faceLandmarks = results.faceLandmarks[0];
-        // Use nose tip (landmark index 1) for pointer control
-        const noseTip = faceLandmarks[1];
+          const faceLandmarks = results.faceLandmarks[0];
+          // Use nose tip (landmark index 1) for pointer control
+          const noseTip = faceLandmarks[1];
 
-        this.drawFaceLandmarks(faceLandmarks);
+          if (this.freshFramesRequired > 0) {
+            this.freshFramesRequired--;
+            this.drawFaceLandmarks(faceLandmarks);
+            this.scheduleNextFrame();
+            return;
+          }
 
-        if (this.callback) {
-          this.callback({
-            x: noseTip.x,
-            y: noseTip.y,
-            confidence: 0.85, // FaceLandmarker doesn't expose per-face confidence directly; use a reasonable value when face is detected
-            landmarks: faceLandmarks,
-          });
+          this.drawFaceLandmarks(faceLandmarks);
+
+          if (this.callback) {
+            this.callback({
+              x: noseTip.x,
+              y: noseTip.y,
+              confidence: 0.85,
+              landmarks: faceLandmarks,
+              gesture: 'pointer',
+            });
+          }
+        } else {
+          if (this.debugCtx && this.debugCanvas) {
+            this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+          }
+          if (this.callback) this.callback(null);
         }
-      } else {
-        if (this.debugCtx && this.debugCanvas) {
-          this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
-        }
-        if (this.callback) this.callback(null);
-      }
-      } catch (e) {
+      } catch {
         // Ignore MediaPipe monotonic timestamp errors
       }
     }
 
-    this.animationFrameId = setTimeout(this.detect, 33) as unknown as number;
+    this.scheduleNextFrame();
   };
 
   stop() {
     this.isTracking = false;
+    this.isPaused = false;
+    this.freshFramesRequired = 0;
+
+    if (this.videoFrameCallbackId !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
+      (this.videoElement as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+      this.videoFrameCallbackId = null;
+    }
+
     if (this.animationFrameId !== null) {
-      clearTimeout(this.animationFrameId);
+      cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
 
@@ -192,6 +256,9 @@ class HeadTrackingService {
       this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
     }
 
+    this.lastX = 0;
+    this.lastY = 0;
+    this.lastVideoTime = -1;
     this.videoElement = null;
     this.callback = null;
   }
@@ -201,19 +268,44 @@ class HeadTrackingService {
     rawY: number,
     viewportWidth: number,
     viewportHeight: number,
-    smoothingFactor: number
+    smoothingFactor: number,
+    sensitivity: number = 5,
+    deadZone: number = 5
   ): { x: number; y: number } {
     // Head tracking has a smaller natural range — map [0.3, 0.7] to full screen
-    const effectiveX = Math.max(0, Math.min(1, (rawX - 0.3) / 0.4));
-    const effectiveY = Math.max(0, Math.min(1, (rawY - 0.3) / 0.4));
+    let effectiveX = Math.max(0, Math.min(1, (rawX - 0.3) / 0.4));
+    let effectiveY = Math.max(0, Math.min(1, (rawY - 0.3) / 0.4));
+
+    // Sensitivity scaling
+    const sensScale = 0.5 + (sensitivity / 10);
+    effectiveX = 0.5 + (effectiveX - 0.5) * sensScale;
+    effectiveY = 0.5 + (effectiveY - 0.5) * sensScale;
+    effectiveX = Math.max(0, Math.min(1, effectiveX));
+    effectiveY = Math.max(0, Math.min(1, effectiveY));
 
     const targetX = (1 - effectiveX) * viewportWidth;
     const targetY = effectiveY * viewportHeight;
 
-    const alpha = Math.max(0.03, 0.4 - (smoothingFactor - 1) * 0.04);
+    if (this.lastX === 0 && this.lastY === 0) {
+      this.lastX = targetX;
+      this.lastY = targetY;
+      return { x: this.lastX, y: this.lastY };
+    }
 
-    this.lastX = this.lastX + alpha * (targetX - this.lastX);
-    this.lastY = this.lastY + alpha * (targetY - this.lastY);
+    const dx = targetX - this.lastX;
+    const dy = targetY - this.lastY;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance < deadZone) {
+      return { x: this.lastX, y: this.lastY };
+    }
+
+    const baseAlpha = Math.max(0.05, 0.4 - (smoothingFactor - 1) * 0.04);
+    const speedFactor = Math.min(1.0, (distance - deadZone) / 80);
+    const alpha = Math.min(0.85, baseAlpha + speedFactor * 0.4);
+
+    this.lastX = this.lastX + alpha * dx;
+    this.lastY = this.lastY + alpha * dy;
 
     this.lastX = Math.max(0, Math.min(viewportWidth, this.lastX));
     this.lastY = Math.max(0, Math.min(viewportHeight, this.lastY));

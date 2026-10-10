@@ -1,15 +1,20 @@
-import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight, Home, Globe } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  ArrowLeft, ArrowRight, Home, RefreshCw, Globe,
+  Mic, MicOff, ChevronRight
+} from 'lucide-react';
 import { HomePage } from './pages/HomePage';
 import { AboutPage } from './pages/AboutPage';
 import { SearchPage } from './pages/SearchPage';
 import { FormPage } from './pages/FormPage';
 import { FeaturesPage } from './pages/FeaturesPage';
+import { BrowseProvider, useBrowseContext } from '../../context/BrowseContext';
 
 type PageId = 'home' | 'about' | 'search' | 'form' | 'features';
 
-interface BrowseWorkspaceProps {
-  onNavigate?: (page: string) => void;
+export interface BrowseWorkspaceProps {
+  isListening?: boolean;
+  lastVoiceCommand?: string | null;
 }
 
 const pageNames: Record<PageId, string> = {
@@ -20,114 +25,201 @@ const pageNames: Record<PageId, string> = {
   features: 'Features',
 };
 
-export const BrowseWorkspace: React.FC<BrowseWorkspaceProps> = ({ onNavigate }) => {
+// Inner component that can consume BrowseContext
+const BrowseWorkspaceInner: React.FC<BrowseWorkspaceProps> = ({
+  isListening = false,
+  lastVoiceCommand = null,
+}) => {
+  const { scrollContainerRef } = useBrowseContext();
+
   const [currentPage, setCurrentPage] = useState<PageId>('home');
   const [history, setHistory] = useState<PageId[]>(['home']);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [notification, setNotification] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const navigate = (page: PageId) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(page);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-    setCurrentPage(page);
-    onNavigate?.(page);
-  };
-
-  const goBack = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      setCurrentPage(history[newIndex]);
-    }
-  };
-
-  const goForward = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      setCurrentPage(history[newIndex]);
-    }
-  };
-
-  const goHome = () => navigate('home');
-
-  const showNotification = (msg: string) => {
+  const showNotification = useCallback((msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(null), 2000);
-  };
-
-  React.useEffect(() => {
-    const onHome = () => goHome();
-    window.addEventListener('handsfree:home', onHome);
-    return () => window.removeEventListener('handsfree:home', onHome);
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+    notifTimerRef.current = setTimeout(() => setNotification(null), 2500);
   }, []);
+
+  const navigate = useCallback((page: PageId) => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push(page);
+      setHistoryIndex(newHistory.length - 1);
+      return newHistory;
+    });
+    setCurrentPage(page);
+    // Reset scroll position on navigation
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [historyIndex, scrollContainerRef]);
+
+  const goBack = useCallback(() => {
+    setHistory(prev => {
+      const newIndex = historyIndex - 1;
+      if (newIndex < 0) return prev;
+      setHistoryIndex(newIndex);
+      setCurrentPage(prev[newIndex]);
+      return prev;
+    });
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+  }, [historyIndex, scrollContainerRef]);
+
+  const goForward = useCallback(() => {
+    setHistory(prev => {
+      const newIndex = historyIndex + 1;
+      if (newIndex >= prev.length) return prev;
+      setHistoryIndex(newIndex);
+      setCurrentPage(prev[newIndex]);
+      return prev;
+    });
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+  }, [historyIndex, scrollContainerRef]);
+
+  const goHome = useCallback(() => navigate('home'), [navigate]);
+
+  const reload = useCallback(() => {
+    setReloadKey(k => k + 1);
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+    showNotification('Page reloaded');
+  }, [scrollContainerRef, showNotification]);
+
+  // Voice-driven scroll targeting the stable scroll container
+  const voiceScroll = useCallback((direction: 'up' | 'down') => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const amount = container.clientHeight * 0.45;
+    container.scrollBy({ top: direction === 'down' ? amount : -amount, behavior: 'smooth' });
+  }, [scrollContainerRef]);
+
+  // Listen for custom window events dispatched by App.tsx voice handler
+  useEffect(() => {
+    const onHome = () => goHome();
+    const onBack = () => goBack();
+    const onForward = () => goForward();
+    const onReload = () => reload();
+    const onScroll = (e: Event) => {
+      const detail = (e as CustomEvent<{ direction: 'up' | 'down' }>).detail;
+      voiceScroll(detail.direction);
+    };
+
+    window.addEventListener('handsfree:home', onHome);
+    window.addEventListener('handsfree:back', onBack);
+    window.addEventListener('handsfree:forward', onForward);
+    window.addEventListener('handsfree:reload', onReload);
+    window.addEventListener('handsfree:scroll', onScroll);
+
+    return () => {
+      window.removeEventListener('handsfree:home', onHome);
+      window.removeEventListener('handsfree:back', onBack);
+      window.removeEventListener('handsfree:forward', onForward);
+      window.removeEventListener('handsfree:reload', onReload);
+      window.removeEventListener('handsfree:scroll', onScroll);
+    };
+  }, [goHome, goBack, goForward, reload, voiceScroll]);
+
+  // Cleanup notification timer
+  useEffect(() => () => {
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+  }, []);
+
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < history.length - 1;
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'home':
-        return <HomePage onNavigate={navigate} onAction={showNotification} />;
-      case 'about':
-        return <AboutPage onAction={showNotification} />;
-      case 'search':
-        return <SearchPage onAction={showNotification} />;
-      case 'form':
-        return <FormPage onAction={showNotification} />;
-      case 'features':
-        return <FeaturesPage onAction={showNotification} />;
-      default:
-        return <HomePage onNavigate={navigate} onAction={showNotification} />;
+      case 'home':     return <HomePage key={`home-${reloadKey}`} onNavigate={navigate} onAction={showNotification} />;
+      case 'about':    return <AboutPage key={`about-${reloadKey}`} onAction={showNotification} />;
+      case 'search':   return <SearchPage key={`search-${reloadKey}`} onAction={showNotification} />;
+      case 'form':     return <FormPage key={`form-${reloadKey}`} onAction={showNotification} />;
+      case 'features': return <FeaturesPage key={`features-${reloadKey}`} onAction={showNotification} />;
+      default:         return <HomePage key={`home-${reloadKey}`} onNavigate={navigate} onAction={showNotification} />;
     }
   };
 
   return (
     <div className="flex-1 flex flex-col bg-background overflow-hidden">
+
+      {/* Voice Command Status Strip */}
+      <div className={`px-4 py-1.5 text-xs flex items-center gap-2 border-b transition-all ${
+        isListening
+          ? 'bg-primary/5 border-primary/20'
+          : 'bg-transparent border-white/5'
+      }`}>
+        <span className={`flex items-center gap-1.5 ${isListening ? 'text-primary' : 'text-slate-500'}`}>
+          {isListening ? <Mic size={11} className="animate-pulse" /> : <MicOff size={11} />}
+          {isListening ? 'Listening for voice commands' : 'Voice off'}
+        </span>
+        {lastVoiceCommand && (
+          <>
+            <ChevronRight size={11} className="text-slate-600" />
+            <span className="text-slate-400 font-medium truncate max-w-xs">
+              "{lastVoiceCommand}"
+            </span>
+          </>
+        )}
+      </div>
+
       {/* Browser-like toolbar */}
-      <div className="bg-surface border-b border-white/5 px-4 py-3 flex items-center gap-3">
+      <div className="bg-surface border-b border-white/5 px-4 py-2.5 flex items-center gap-2">
+        {/* Nav buttons */}
         <button
           onClick={goBack}
-          disabled={historyIndex <= 0}
+          disabled={!canGoBack}
           className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-card disabled:opacity-30 disabled:cursor-not-allowed transition-all focus:outline-none focus:ring-2 focus:ring-primary"
           data-handsfree-action="go-back"
-          title="Go Back"
+          title="Go Back (voice: 'go back')"
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={17} />
         </button>
         <button
           onClick={goForward}
-          disabled={historyIndex >= history.length - 1}
+          disabled={!canGoForward}
           className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-card disabled:opacity-30 disabled:cursor-not-allowed transition-all focus:outline-none focus:ring-2 focus:ring-primary"
           data-handsfree-action="go-forward"
-          title="Go Forward"
+          title="Go Forward (voice: 'go forward')"
         >
-          <ArrowRight size={18} />
+          <ArrowRight size={17} />
         </button>
         <button
           onClick={goHome}
           className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-card transition-all focus:outline-none focus:ring-2 focus:ring-primary"
           data-handsfree-action="go-home"
-          title="Home"
+          title="Home (voice: 'go home')"
         >
-          <Home size={18} />
+          <Home size={17} />
+        </button>
+        <button
+          onClick={reload}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-card transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+          data-handsfree-action="reload"
+          title="Reload (voice: 'reload')"
+        >
+          <RefreshCw size={15} />
         </button>
 
         {/* Address bar */}
-        <div className="flex-1 max-w-2xl bg-card border border-white/5 rounded-lg px-4 py-2 text-sm flex items-center shadow-inner">
-          <Globe size={14} className="text-slate-500 mr-2" />
-          <span className="text-slate-400 mr-1">handsfree://</span>
-          <span className="text-white font-medium">{currentPage}</span>
+        <div className="flex-1 bg-card border border-white/5 rounded-lg px-3 py-1.5 text-sm flex items-center shadow-inner min-w-0">
+          <Globe size={13} className="text-slate-500 mr-1.5 shrink-0" />
+          <span className="text-slate-500 mr-1 shrink-0">handsfree://</span>
+          <span className="text-white font-medium truncate">{currentPage}</span>
+          <span className="ml-auto text-slate-600 text-xs shrink-0">internal</span>
         </div>
 
-        {/* Page nav links */}
-        <div className="flex items-center gap-1">
+        {/* Page nav tabs */}
+        <div className="flex items-center gap-1 shrink-0">
           {(Object.keys(pageNames) as PageId[]).map((pid) => (
             <button
               key={pid}
               onClick={() => navigate(pid)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary ${
                 currentPage === pid
-                  ? 'bg-primary/20 text-primary border border-primary/30 shadow-[0_0_10px_rgba(139,92,246,0.2)]'
+                  ? 'bg-primary/20 text-primary border border-primary/30'
                   : 'text-slate-400 hover:text-white hover:bg-card border border-transparent'
               }`}
               data-handsfree-target={pid}
@@ -139,18 +231,29 @@ export const BrowseWorkspace: React.FC<BrowseWorkspaceProps> = ({ onNavigate }) 
         </div>
       </div>
 
-      {/* Notification */}
+      {/* Action Notification */}
       {notification && (
-        <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-2 text-green-400 text-sm flex items-center justify-center gap-2 animate-pulse-slow shadow-[0_0_15px_rgba(34,197,94,0.1)]">
-          <span className="w-2 h-2 rounded-full bg-green-400" />
+        <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-1.5 text-green-400 text-xs flex items-center justify-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           {notification}
         </div>
       )}
 
-      {/* Page Content */}
-      <div className="flex-1 overflow-y-auto p-6" id="browse-viewport">
+      {/* Page Content — stable ref for hand scroll */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto p-6 scroll-smooth"
+        id="browse-viewport"
+      >
         {renderPage()}
       </div>
     </div>
   );
 };
+
+// Outer component provides BrowseContext
+export const BrowseWorkspace: React.FC<BrowseWorkspaceProps> = (props) => (
+  <BrowseProvider>
+    <BrowseWorkspaceInner {...props} />
+  </BrowseProvider>
+);

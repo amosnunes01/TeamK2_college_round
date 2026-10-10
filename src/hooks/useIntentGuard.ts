@@ -15,6 +15,7 @@ interface UseIntentGuardProps {
   interactionState: InteractionState;
   setInteractionState: (state: InteractionState) => void;
   isTracking: boolean;
+  onActionExecute?: (action: PendingAction) => void;
 }
 
 export function useIntentGuard({
@@ -22,7 +23,8 @@ export function useIntentGuard({
   settings,
   interactionState,
   setInteractionState,
-  isTracking
+  isTracking,
+  onActionExecute
 }: UseIntentGuardProps) {
   const [currentTarget, setCurrentTarget] = useState<TargetElement | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -35,11 +37,26 @@ export function useIntentGuard({
   const pointerPositionRef = useRef<PointerPosition | null>(pointerPosition);
   const settingsRef = useRef(settings);
   const stateRef = useRef(interactionState);
+  const onActionExecuteRef = useRef(onActionExecute);
 
   // Sync refs
   useEffect(() => { pointerPositionRef.current = pointerPosition; }, [pointerPosition]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
-  useEffect(() => { stateRef.current = interactionState; }, [interactionState]);
+  useEffect(() => {
+    stateRef.current = interactionState;
+    if (interactionState === 'paused') {
+      setCurrentTarget(null);
+      lastTargetElement.current = null;
+      setPendingAction(null);
+      dwellStartTime.current = 0;
+    } else if (interactionState === 'tracking') {
+      // Safety: enforce activation cooldown immediately after resume to prevent instant click
+      lastActivationTime.current = Date.now();
+      lastTargetElement.current = null;
+      dwellStartTime.current = 0;
+    }
+  }, [interactionState]);
+  useEffect(() => { onActionExecuteRef.current = onActionExecute; }, [onActionExecute]);
 
   const logActivation = useCallback((action: PendingAction, result: ActivationRecord['result'], reason?: string) => {
     setActivationRecords(prev => {
@@ -87,7 +104,10 @@ export function useIntentGuard({
 
     setInteractionState('executing');
     
-    // Perform click
+    // Notify external listeners (e.g. Chrome Extension bridge)
+    onActionExecuteRef.current?.(action);
+
+    // Perform click in DOM
     if (action.target.element && document.body.contains(action.target.element)) {
       action.target.element.click();
       if (action.target.type === 'input') {
@@ -131,6 +151,11 @@ export function useIntentGuard({
   const handleVoiceCommand = useCallback((command: VoiceCommand) => {
     if (!isTracking || stateRef.current === 'paused' || stateRef.current === 'error') return;
 
+    // Safety: prevent voice click while actively scrolling
+    if (pointerPositionRef.current?.gesture === 'scroll') {
+      return;
+    }
+
     if (command.parsed === 'click' || command.parsed === 'select') {
       // Execute click on current target
       if (currentTarget) {
@@ -165,6 +190,7 @@ export function useIntentGuard({
     if (!isTracking || stateRef.current === 'paused' || stateRef.current === 'error') {
       if (currentTarget) {
         setCurrentTarget(null);
+        lastTargetElement.current = null;
         const s = stateRef.current;
         if (s === 'targeted' || s === 'pendingConfirmation') {
           if (pendingAction) {
@@ -182,9 +208,12 @@ export function useIntentGuard({
 
     const checkPointer = () => {
       const pos = pointerPositionRef.current;
-      if (!pos) {
+      
+      // Failure safety: tracking lost or low confidence drops pointer and cancels dwell
+      if (!pos || pos.confidence < 0.5) {
         if (currentTarget) {
           setCurrentTarget(null);
+          lastTargetElement.current = null;
           if (stateRef.current === 'targeted' || stateRef.current === 'pendingConfirmation') {
             setInteractionState('tracking');
             if (pendingAction) logActivation(pendingAction, 'cancelled', 'Pointer lost');
@@ -195,13 +224,24 @@ export function useIntentGuard({
         return;
       }
 
-      // Hide pointer overlay momentarily to find element underneath
-      const pointerEls = document.querySelectorAll('.handsfree-pointer');
-      pointerEls.forEach(el => (el as HTMLElement).style.display = 'none');
-      
-      let el = document.elementFromPoint(pos.x, pos.y) as HTMLElement | null;
-      
-      pointerEls.forEach(el => (el as HTMLElement).style.display = 'block');
+      // CRITICAL: Prevent scrolling from triggering clicks or dwelling
+      if (pos.gesture === 'scroll') {
+        if (currentTarget) {
+          setCurrentTarget(null);
+          lastTargetElement.current = null;
+          if (stateRef.current === 'targeted' || stateRef.current === 'pendingConfirmation') {
+            setInteractionState('tracking');
+            if (pendingAction) logActivation(pendingAction, 'cancelled', 'Scroll gesture active');
+            setPendingAction(null);
+          }
+        }
+        animationFrameId.current = requestAnimationFrame(checkPointer);
+        return;
+      }
+
+      // Hit test target without layout-thrashing hide/show cycles
+      // Elements with pointer-events: none (like .handsfree-pointer) are skipped automatically by document.elementFromPoint
+      const el = document.elementFromPoint(pos.x, pos.y) as HTMLElement | null;
 
       if (el) {
         // Find closest interactive element

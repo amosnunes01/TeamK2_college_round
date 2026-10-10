@@ -15,7 +15,17 @@ const RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 type WsMessage =
-  | { type: 'HANDSFREE_BROADCAST'; payload: { x: number; y: number; gesture?: string; isTracking: boolean } }
+  | {
+      type: 'HANDSFREE_BROADCAST';
+      payload: {
+        x: number;
+        y: number;
+        normX?: number;
+        normY?: number;
+        gesture?: string;
+        isTracking: boolean;
+      };
+    }
   | { type: 'HANDSFREE_CLICK' }
   | { type: 'HANDSFREE_VOICE_COMMAND'; command: string; text?: string }
   | { type: 'HANDSFREE_STOP' };
