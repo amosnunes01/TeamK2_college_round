@@ -94,7 +94,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
                 : interactionState === 'targeted'
                 ? 'text-amber-400'
                 : interactionState === 'pendingConfirmation'
-                ? 'text-purple-400'
+                ? 'text-slate-400'
                 : interactionState === 'executing'
                 ? 'text-green-400'
                 : interactionState === 'paused'

@@ -82,7 +82,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onAction }) => {
         <h2 className="text-xl font-semibold text-white mb-4">How It Works</h2>
         <div className="space-y-4">
           {[
-            { icon: <Hand size={20} />, title: 'Hand Tracking', color: 'text-purple-400', desc: 'A webcam detects your hand using MediaPipe. Move your index finger to control the pointer. Raise two fingers (victory gesture) to enter scroll mode — vertical movement then scrolls the page smoothly.' },
+            { icon: <Hand size={20} />, title: 'Hand Tracking', color: 'text-slate-400', desc: 'A webcam detects your hand using MediaPipe. Move your index finger to control the pointer. Raise two fingers (victory gesture) to enter scroll mode — vertical movement then scrolls the page smoothly.' },
             { icon: <MousePointer size={20} />, title: 'Dwell Click', color: 'text-blue-400', desc: 'Hover over any button or link for the configured dwell time (default 800 ms). A progress indicator confirms the action before it fires. IntentGuard blocks accidental clicks during tracking uncertainty.' },
             { icon: <Mic size={20} />, title: 'Voice Commands', color: 'text-emerald-400', desc: 'Say commands like "go back", "go forward", "scroll down", "click" or "pause control" at any time. The voice strip at the top shows listening state and the last recognized command.' },
             { icon: <Target size={20} />, title: 'IntentGuard', color: 'text-amber-400', desc: 'Every action passes through the IntentGuard state machine: idle → tracking → targeted → executing. Scrolling gestures suspend dwelling. Tracking loss cancels pending actions immediately.' },

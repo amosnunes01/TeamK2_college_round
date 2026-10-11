@@ -105,7 +105,7 @@ class HeadTrackingService {
 
     // Draw key face landmarks (subset for performance)
     ctx.fillStyle = '#22d3ee';
-    ctx.strokeStyle = '#8b5cf6';
+    ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 1;
 
     // Draw a subset of points to show the face outline

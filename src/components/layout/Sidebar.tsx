@@ -18,7 +18,7 @@ const tabs: { id: SidebarTab; label: string; icon: React.ElementType }[] = [
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   return (
     <aside className="sidebar-shell w-16 md:w-20 border-r border-white/5 flex flex-col items-center py-6 gap-4">
-      <div className="brand-mark w-11 h-11 mb-4 rounded-2xl flex items-center justify-center text-lg font-black text-white shadow-[0_0_30px_rgba(124,58,237,0.45)]">
+      <div className="brand-mark w-11 h-11 mb-4 rounded-2xl flex items-center justify-center text-lg font-black text-white shadow-[0_0_30px_rgba(111,133,157,0.35)]">
         H
       </div>
 

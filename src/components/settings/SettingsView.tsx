@@ -30,7 +30,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* Theme */}
-        <Section title="Appearance" icon={<Monitor className="w-5 h-5 text-violet-400" />}>
+        <Section title="Appearance" icon={<Monitor className="w-5 h-5 text-slate-400" />}>
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-primary font-medium">Theme</p>
@@ -49,7 +49,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </Section>
 
         {/* Tracking Mode */}
-        <Section title="Tracking Mode" icon={<Activity className="w-5 h-5 text-violet-400" />}>
+        <Section title="Tracking Mode" icon={<Activity className="w-5 h-5 text-slate-400" />}>
           <p className="text-secondary text-sm mb-4">
             {isTracking ? 'Stop the active session before changing modes.' : 'Choose how this session controls the interface. Combined tracking is coming soon.'}
           </p>
@@ -61,9 +61,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 disabled={mode === 'combined' || isTracking}
                 aria-pressed={settings.trackingMode === mode}
                 title={mode === 'combined' ? 'Combined tracking is coming soon' : isTracking ? 'Stop the active session to change modes' : undefined}
-                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-violet-400 ${
+                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-slate-400 ${
                   settings.trackingMode === mode
-                    ? 'bg-violet-600/10 border-violet-500 text-primary'
+                    ? 'bg-slate-600/10 border-slate-500 text-primary'
                     : 'bg-surface border-white/5 text-secondary hover:bg-white/5 hover:border-white/10'
                 } ${mode === 'combined' || isTracking ? 'opacity-45 cursor-not-allowed' : 'cursor-pointer'}`}
               >
@@ -196,7 +196,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   aria-pressed={settings.textSize === size}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                     settings.textSize === size
-                      ? 'bg-violet-600 text-white shadow-sm'
+                      ? 'bg-slate-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -232,8 +232,8 @@ function ToggleSwitch({ label, checked, onChange }: { label: string; checked: bo
     <button
       type="button"
       onClick={onChange}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-background ${
-        checked ? 'bg-violet-500' : 'bg-surface border-white/10'
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-background ${
+        checked ? 'bg-slate-500' : 'bg-surface border-white/10'
       }`}
       role="switch"
       aria-label={label}
@@ -273,7 +273,7 @@ function SliderSetting({
       <div className="flex justify-between items-center mb-3">
         <label htmlFor={inputId} className="text-primary font-medium text-sm">{label}</label>
         <div className="px-2 py-1 bg-surface rounded-md border border-white/5">
-          <span className="text-violet-300 text-sm font-mono">{value}</span>
+          <span className="text-slate-300 text-sm font-mono">{value}</span>
         </div>
       </div>
       <input
@@ -284,7 +284,7 @@ function SliderSetting({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 bg-surface rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-violet-500 [&::-webkit-slider-thumb]:rounded-full focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-background"
+        className="w-full h-1.5 bg-surface rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-slate-500 [&::-webkit-slider-thumb]:rounded-full focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-background"
       />
       <p className="text-slate-500 text-xs mt-2">{description}</p>
     </div>

@@ -105,7 +105,7 @@ export const EvaluationView: React.FC = () => {
             {!activeSession ? (
               <button
                 onClick={startSession}
-                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-violet-400"
+                className="flex items-center gap-2 px-5 py-2.5 bg-slate-600 hover:bg-slate-500 text-white rounded-lg font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <Play className="w-4 h-4" />
                 New Session
@@ -149,7 +149,7 @@ export const EvaluationView: React.FC = () => {
           <MetricCard
             title="Avg Completion (HF)"
             value={formatTime(avgCompletionTime(handsfreeTrials))}
-            icon={<Clock className="w-5 h-5 text-violet-400" />}
+            icon={<Clock className="w-5 h-5 text-slate-400" />}
           />
           <MetricCard
             title="Success Rate (HF)"
@@ -163,10 +163,10 @@ export const EvaluationView: React.FC = () => {
           {/* Left Column: Active Session & Trial Controls */}
           <div className="xl:col-span-1 space-y-8">
             {activeSession ? (
-              <div className="bg-card border border-violet-500/30 rounded-2xl p-6 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500" />
+              <div className="bg-card border border-slate-500/30 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-slate-500 to-slate-400" />
                 <h3 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-violet-400" />
+                  <Activity className="w-5 h-5 text-slate-400" />
                   Active Session
                 </h3>
 
@@ -176,7 +176,7 @@ export const EvaluationView: React.FC = () => {
                     onClick={() => setSelectedMode('conventional')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
                       selectedMode === 'conventional'
-                        ? 'bg-blue-600 text-white shadow'
+                        ? 'bg-slate-600 text-white shadow'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -186,7 +186,7 @@ export const EvaluationView: React.FC = () => {
                     onClick={() => setSelectedMode('handsfree')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
                       selectedMode === 'handsfree'
-                        ? 'bg-violet-600 text-white shadow'
+                        ? 'bg-stone-600 text-white shadow'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -198,7 +198,7 @@ export const EvaluationView: React.FC = () => {
                   <div className="bg-surface border border-white/5 rounded-xl p-5 space-y-5">
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-violet-400">Recording</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Recording</span>
                         <span className="flex h-2 w-2 relative">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -269,8 +269,8 @@ export const EvaluationView: React.FC = () => {
                           className="w-full text-left bg-surface hover:bg-white/5 border border-white/5 rounded-xl p-4 transition-all group"
                         >
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-white font-medium text-sm group-hover:text-violet-300 transition-colors">{task.name}</span>
-                            <Play className="w-4 h-4 text-slate-500 group-hover:text-violet-400 transition-colors" />
+                            <span className="text-white font-medium text-sm group-hover:text-slate-300 transition-colors">{task.name}</span>
+                            <Play className="w-4 h-4 text-slate-500 group-hover:text-slate-400 transition-colors" />
                           </div>
                           <p className="text-slate-500 text-xs">{task.description}</p>
                         </button>
@@ -288,7 +288,7 @@ export const EvaluationView: React.FC = () => {
                 <p className="text-slate-400 text-sm mb-6 max-w-[240px]">Start a new session to record metrics for different input modalities.</p>
                 <button
                   onClick={startSession}
-                  className="px-6 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-medium text-sm transition-all"
+                  className="px-6 py-2.5 bg-slate-600 hover:bg-slate-500 text-white rounded-lg font-medium text-sm transition-all"
                 >
                   Start Session
                 </button>
@@ -317,7 +317,7 @@ export const EvaluationView: React.FC = () => {
                         <tr>
                           <th className="text-left font-medium text-slate-400 py-3 px-4">Metric</th>
                           <th className="text-right font-medium text-blue-400 py-3 px-4">Conventional</th>
-                          <th className="text-right font-medium text-violet-400 py-3 px-4">HandsFree</th>
+                          <th className="text-right font-medium text-slate-400 py-3 px-4">HandsFree</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5 bg-card">
@@ -344,7 +344,7 @@ export const EvaluationView: React.FC = () => {
                         <tr className="hover:bg-white/[0.02] transition-colors">
                           <td className="py-3 px-4 font-medium text-slate-200">Success Rate</td>
                           <td className="text-right py-3 px-4 font-mono text-blue-300 font-medium">{formatPercent(successRate(conventionalTrials))}</td>
-                          <td className="text-right py-3 px-4 font-mono text-violet-300 font-medium">{formatPercent(successRate(handsfreeTrials))}</td>
+                          <td className="text-right py-3 px-4 font-mono text-slate-300 font-medium">{formatPercent(successRate(handsfreeTrials))}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -367,12 +367,12 @@ export const EvaluationView: React.FC = () => {
                       </div>
                       <div>
                         <div className="flex justify-between text-sm mb-1.5">
-                          <span className="text-violet-400 font-medium">HandsFree</span>
+                          <span className="text-slate-400 font-medium">HandsFree</span>
                           <span className="text-white font-mono">{formatPercent(successRate(handsfreeTrials))}</span>
                         </div>
                         <div className="w-full bg-surface rounded-full h-2.5 overflow-hidden">
                           <div
-                            className="h-full bg-violet-500 rounded-full transition-all duration-500 ease-out"
+                            className="h-full bg-slate-500 rounded-full transition-all duration-500 ease-out"
                             style={{ width: `${(successRate(handsfreeTrials) ?? 0) * 100}%` }}
                           />
                         </div>
@@ -417,7 +417,7 @@ export const EvaluationView: React.FC = () => {
                             <span
                               className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 trial.inputMode === 'handsfree'
-                                  ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20'
+                                  ? 'bg-slate-500/10 text-slate-300 border border-slate-500/20'
                                   : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                               }`}
                             >

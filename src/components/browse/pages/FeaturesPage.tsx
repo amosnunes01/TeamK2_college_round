@@ -10,7 +10,7 @@ interface FeaturesPageProps {
 
 const features = [
   {
-    icon: <Hand size={22} />, color: 'text-purple-400', title: 'Hand Tracking',
+    icon: <Hand size={22} />, color: 'text-slate-400', title: 'Hand Tracking',
     summary: 'MediaPipe HandLandmarker tracks 21 keypoints in real time.',
     details: 'Runs entirely on-device using WebAssembly. Detects the index fingertip to control the pointer. A peace/victory gesture (two raised fingers) enters scroll mode. Tracking confidence is continuously monitored — frames below 55% confidence are discarded to prevent jitter.',
   },

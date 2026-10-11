@@ -112,7 +112,7 @@ class TrackingService {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#22d3ee';
-    ctx.strokeStyle = '#8b5cf6';
+    ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 2;
 
     const connections = [
