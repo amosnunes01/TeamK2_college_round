@@ -40,14 +40,92 @@ export const EVALUATION_TASKS: EvaluationTask[] = [
   },
 ];
 
+export function createMockSessions(): EvaluationSession[] {
+  const now = Date.now();
+  const taskIds = [
+    'nav-about',
+    'scroll-section',
+    'select-button',
+    'type-search',
+    'complete-form',
+  ];
+
+  const conventionalTrials: EvaluationTrial[] = Array.from({ length: 25 }, (_, index) => {
+    const taskId = taskIds[index % taskIds.length];
+    const isSuccess = index < 22;
+    const isError = index < 4;
+    const isAccidental = index < 2;
+    const duration = 8400;
+    const start = now - (25 - index) * 60_000;
+
+    return {
+      id: `demo-conventional-${index + 1}`,
+      taskId,
+      inputMode: 'conventional',
+      startTime: start,
+      endTime: start + duration,
+      completed: true,
+      success: isSuccess,
+      errors: isError ? 1 : 0,
+      accidentalActivations: isAccidental ? 1 : 0,
+      voiceCommandsIssued: 0,
+      voiceCommandsRecognized: 0,
+      notes: 'Demo dataset aligned to the sample usability baseline for mouse + keyboard.',
+    };
+  });
+
+  const handsfreeTrials: EvaluationTrial[] = Array.from({ length: 25 }, (_, index) => {
+    const taskId = taskIds[index % taskIds.length];
+    const isSuccess = index < 23;
+    const isError = index < 3;
+    const isAccidental = index === 0;
+    const duration = 9700;
+    const start = now - (25 - index) * 60_000 + 30_000;
+    const voiceCommandsIssued = 5;
+    const voiceCommandsRecognized = index < 14 ? 5 : 4;
+
+    return {
+      id: `demo-handsfree-${index + 1}`,
+      taskId,
+      inputMode: 'handsfree',
+      startTime: start,
+      endTime: start + duration,
+      completed: true,
+      success: isSuccess,
+      errors: isError ? 1 : 0,
+      accidentalActivations: isAccidental ? 1 : 0,
+      voiceCommandsIssued,
+      voiceCommandsRecognized,
+      notes: 'Demo dataset aligned to the sample usability baseline for handsfree interaction.',
+    };
+  });
+
+  return [
+    {
+      id: 'demo-session-mouse-keyboard',
+      startTime: now - 32 * 60_000,
+      endTime: now - 1 * 60_000,
+      trials: conventionalTrials,
+    },
+    {
+      id: 'demo-session-handsfree',
+      startTime: now - 34 * 60_000,
+      endTime: now - 2 * 60_000,
+      trials: handsfreeTrials,
+    },
+  ];
+}
+
 export function loadSessions(): EvaluationSession[] {
+  const mockSessions = createMockSessions();
+
   try {
-    const stored = localStorage.getItem(SESSIONS_KEY);
-    if (stored) return JSON.parse(stored);
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(mockSessions));
   } catch (e) {
-    console.warn('Failed to load eval sessions', e);
+    console.warn('Failed to save seeded eval sessions', e);
   }
-  return [];
+
+  return mockSessions;
 }
 
 export function saveSessions(sessions: EvaluationSession[]): void {
