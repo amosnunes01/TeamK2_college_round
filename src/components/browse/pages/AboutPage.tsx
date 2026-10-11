@@ -1,16 +1,9 @@
 import React from 'react';
-import { Users, Target, Heart, Award } from 'lucide-react';
+import { Target, Award } from 'lucide-react';
 
 interface AboutPageProps {
   onAction: (msg: string) => void;
 }
-
-const teamMembers = [
-  { name: 'Jadon Rodricks', role: 'Project Lead & Full-Stack Dev', initials: 'JR' },
-  { name: 'Team Member 2', role: 'Computer Vision & ML', initials: 'TM' },
-  { name: 'Team Member 3', role: 'UX & Accessibility Design', initials: 'TM' },
-  { name: 'Team Member 4', role: 'Voice & NLP Systems', initials: 'TM' },
-];
 
 export const AboutPage: React.FC<AboutPageProps> = ({ onAction }) => {
   return (
@@ -64,41 +57,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onAction }) => {
               <p className="text-slate-400 text-xs leading-relaxed">{item.desc}</p>
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Team */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Users size={20} className="text-emerald-400" />
-          <h2 className="text-xl font-semibold text-white">The Team</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {teamMembers.map((member) => (
-            <div key={member.name} className="bg-card border border-white/5 rounded-xl p-4 flex items-center gap-4" data-handsfree-target={`team-${member.name.split(' ')[0].toLowerCase()}`}>
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                {member.initials}
-              </div>
-              <div>
-                <div className="text-white font-medium text-sm">{member.name}</div>
-                <div className="text-slate-400 text-xs">{member.role}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Values */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Heart size={20} className="text-rose-400" />
-          <h2 className="text-xl font-semibold text-white">Values</h2>
-        </div>
-        <div className="space-y-3 text-slate-300 leading-relaxed bg-card border border-white/5 rounded-xl p-6">
-          <p><strong className="text-white">Privacy:</strong> No webcam frames leave your device. All processing happens locally in the browser using WASM-compiled models.</p>
-          <p><strong className="text-white">Accessibility:</strong> The interface degrades gracefully. Every feature has a keyboard fallback.</p>
-          <p><strong className="text-white">Honesty:</strong> We do not claim universal browser compatibility. The workspace is an in-app environment specifically designed for hands-free control.</p>
-          <p><strong className="text-white">Safety:</strong> IntentGuard prevents accidental clicks, scroll gestures suspend dwelling, and every tracking-uncertain frame is discarded before it can cause unintended actions.</p>
         </div>
       </div>
 
